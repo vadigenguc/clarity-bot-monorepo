@@ -2,3 +2,4 @@ google-cloud-pubsub
 openai
 pydub
 python-dotenv
+supabase
