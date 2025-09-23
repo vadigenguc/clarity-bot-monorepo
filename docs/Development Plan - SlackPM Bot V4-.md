@@ -56,7 +56,7 @@ Implementation Summary: The `authorized_users` table schema is defined in `migra
 [x] Develop a permission-checking function that triggers on every incoming event.
 [x] For group DMs, the function must fetch all members of the conversation and verify that *every* member is authorized.
 [x] If unauthorized, the bot remains silent.
-Implementation Summary: The `is_authorized` middleware in `main.py` has been implemented. It now supports "Selective Interaction (Authorized Users Only)" in public and private channels: it passively processes messages/files from all channels it's invited to, but only responds/interacts if the initiating user is authorized. It also checks if the channel is explicitly enabled in the `workspace_channels` table. For DMs and group DMs, it ensures all members are authorized.
+Implementation Summary: The `is_authorized` middleware in `main.py` has been implemented. It now supports "Selective Interaction (Authorized Users Only)" in public and private channels: it passively processes messages/files from all channels it's invited to, but only responds/internacts if the initiating user is authorized. It also checks if the channel is explicitly enabled in the `workspace_channels` table. For DMs and group DMs, it ensures all members are authorized.
 **Post-Implementation Refactoring & Bug Fixes:**
 - **Authorization Logic Refactoring:** The main `check_authorization` function was significantly refactored for clarity and maintainability. The monolithic function was broken down into smaller, single-purpose helper functions: `is_channel_enabled`, `is_user_authorized`, and `are_all_group_members_authorized`.
 - **Context Parsing Bug:** A critical bug was fixed where the application would crash with an `AttributeError` when processing events. The issue was that the authorization logic was incorrectly attempting to parse context variables (`user_id`, `channel_id`) from the event `body` instead of the `context` object provided by `slack_bolt`. The logic was corrected to pull these IDs from the correct source.
@@ -96,9 +96,9 @@ Implementation Summary: The `pgvector` extension has been enabled in Supabase. T
 - Client-side email validation and error display have been implemented in `web/script.js`.
 - A toaster notification provides a success message without a page reload, also handled by `web/script.js`.
 - A Netlify Function (`netlify/functions/submission-created.js`) has been created to send an autoresponder email via SendGrid upon successful submission.
-[ ] Design database schema for storing waitlist emails in Supabase. **(POSTPONED)**
-[ ] Develop a backend endpoint (e.g., in FastAPI) to receive waitlist submissions. **(POSTPONED)**
-[ ] Store submitted emails in the Supabase waitlist table. **(POSTPONED)**
+[-] Design database schema for storing waitlist emails in Supabase. **(POSTPONED)**
+[-] Develop a backend endpoint (e.g., in FastAPI) to receive waitlist submissions. **(POSTPONED)**
+[-] Store submitted emails in the Supabase waitlist table. **(POSTPONED)**
 
 ### **Phase 3: Meeting Transcription & Summarization**
 
@@ -108,7 +108,7 @@ Implementation Summary: The `pgvector` extension has been enabled in Supabase. T
 **3.1 Transcription Service Integration**
 [x] Select and integrate a third-party speech-to-text API (OpenAI Whisper).
 [x] Handle API authentication and job management.
-Implementation Summary: OpenAI Whisper API has been selected for speech-to-text transcription. For files under 25MB, direct transcription via FastAPI is used. For larger files, a job queuing system using Google Cloud Pub/Sub and a Google Cloud Run Job background worker is implemented.
+Implementation Summary: OpenAI Whisper API has been selected for speech-to-text transcription. For files under 25MB, direct transcription via FastAPI is used. For larger files, a job queuing system using Google Cloud Pub/Sub and a Google Cloud Run Job background worker is implemented. Docker images for both the FastAPI backend and the worker are built using Google Cloud Build.
 
 **3.2 Media & Document File Handling**
 [x] Use Slack's API to detect and download all user-uploaded files in authorized contexts.
@@ -128,6 +128,7 @@ Implementation Summary:
             *   Receives the individual text transcripts and stitches them together.
             *   Saves the final, complete transcript to the Supabase database (into `document_embeddings` table with `source_type='transcription'`).
             *   Sends a final Slack message to the user (e.g., "Your transcription for `[file_name]` is complete!") to confirm completion.
+- **Docker Image Creation (via Google Cloud Build):** Docker images for both the FastAPI backend and the worker are built using Google Cloud Build, eliminating the need for local Docker Desktop installation on Windows Home editions.
 
 **3.3 Summarization Engine**
 [ ] Utilize a Large Language Model (e.g., via Gemini API) to generate summaries from transcripts.
