@@ -199,11 +199,22 @@ async def polar_license_webhook(request: Request):
 # --- Vectorization and Document Processing Functions ---
 
 # Load Sentence Transformer model globally
+# Specify the custom cache directory where the model was downloaded by build.sh
+MODEL_CACHE_DIR = "./.cache/sentence_transformers"
+MODEL_NAME = "all-MiniLM-L6-v2"
+
 try:
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    logger.info("SentenceTransformer model 'all-MiniLM-L6-v2' loaded successfully.")
+    # Ensure the cache directory exists before trying to load
+    if not os.path.exists(MODEL_CACHE_DIR):
+        logger.warning(f"Model cache directory {MODEL_CACHE_DIR} not found. Attempting to create and download model.")
+        os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
+        # If the directory wasn't there, try to download it now (might still cause OOM if not handled by build.sh)
+        embedding_model = SentenceTransformer(MODEL_NAME, cache_folder=MODEL_CACHE_DIR)
+    else:
+        embedding_model = SentenceTransformer(MODEL_NAME, cache_folder=MODEL_CACHE_DIR)
+    logger.info(f"SentenceTransformer model '{MODEL_NAME}' loaded successfully from {MODEL_CACHE_DIR}.")
 except Exception as e:
-    logger.error(f"Error loading SentenceTransformer model: {e}")
+    logger.error(f"Error loading SentenceTransformer model '{MODEL_NAME}' from {MODEL_CACHE_DIR}: {e}")
     embedding_model = None # Handle case where model fails to load
 
 def get_embedding(text: str):
