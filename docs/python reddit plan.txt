@@ -1,0 +1,14 @@
+(1) Research and outline the architecture for a local Python application on Windows. Identify necessary libraries for Reddit API interaction (like PRAW), scheduling tasks, and file handling.
+(2) Design an external configuration file structure (e.g., in YAML or INI format). This file will act as the manageable 'prompt' and should allow a user to easily define:
+(a) A list of target Reddit subreddits to monitor.
+(b) A categorized list of keywords and phrases that signal a marketing opportunity (e.g., pain points, competitor mentions, tool requests).
+(c) Application settings like the check frequency and the directory for output files.
+(3) Detail the logic for the application's core monitoring function, which involves fetching new posts and comments from the subreddits specified in the configuration file and scanning their text for the defined keywords.
+(4) Specify the process for contextual analysis. When a keyword is matched in a comment, the plan should include steps to retrieve the parent post and immediate parent comment to understand the broader conversation and filter out irrelevant matches.
+(5) Design a clear and structured format for the output `.txt` reports. Each identified signal should be recorded with essential information for quick review, including:
+(a) A direct URL to the relevant comment or post.
+(b) The subreddit where it was found.
+(c) The specific keyword/phrase that was matched.
+(d) The full text of the comment/post.
+(e) The timestamp of the finding.
+(6) Outline the scheduling and reporting mechanism. The application should be designed to run periodically and append new findings to a daily or weekly report file, ensuring a consistent and organized log of opportunities.

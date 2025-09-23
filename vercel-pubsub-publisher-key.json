@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "clarity-b0t",
+  "private_key_id": "81b0f348def5c7cc93aab1f3234ffcbfb182dcd7",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDeVKhID8p5vKrL\nmApmumuTktsXmU+17jj/TWw/vVQVTTHB52wSdAxc/QBvL9EeSgFbCAOWkjcpPeax\n4Re3PrCPCF5Hw5zFEkrFl4P6DN9dPgDsY8rJiADnNPyeud+6/23xqfL9u+EEFLez\nMdmt1WjnKe6XfsrjSADretXx1Mwo0I6DUWHlNDXUTt8kS87Omm2ep6kb0Wyw0Us5\nfbuKNeY2TMXIROI8UZsfZE3YE/4xfJYDJtVHib7jTCCVEZsK/sf2ZCoPWTQSrkUl\nuNSSkM9GMSh6LmeIOxGJ9KglEG0ksplmqX60jIUc9lYhqms0k3VTN8T1bqYo6nO/\ngbRL3K7jAgMBAAECggEAPxRB0oA4cCWpR65RdSf7EZme86kZxoJaRYUP612qF4kZ\nTux76xhl0ZQupV0ptbBFhjBV5EiDwf3AEEPO2Ly+lzZGmZHUTs2LzVfZp/4y+V94\nH5mIlXky2GZeLiKKaaHC7cfMG1VM2D2QiRThr8JWyw9IlE7y/V0WdbkaLkyzx/gs\ntZVQ47Yeoc5tFtEmJetOYfz1+4arqZnj5JiXMANJvRM6e+oqTI0tUPyebp6OZJPC\n0cBs/WlXABpvVeMbtfZl10fg9EnE9qSnmBGLWFds21iSLkby1SItMneIxkYzdp7k\np8wWZgsi56smno6SZylAmXVgsrXPPnil3Thwfgga8QKBgQDwa1hhDv/cBtBBskwH\nqtRsipCutHMoih6f8FADYWwIs0Vy2fRHdPk8QXKugk6YHu89322cRSyFi/EVqFYA\nT4zgXgxcit2SJM6IToQWqFqILPcHM9lU/bR7d6e2Z/8cLHUAzTPRxd3/gu+O6sMd\nStQCZQDjKrA7PfsuLstm5t5FNwKBgQDsvTblrB2vIxa10ytoplsGC2zOubDwk42O\nzqNFxHgdceNXPQDNkoLjOqhblHvkTu+Zp2HlheXg2VUML9vhwn4bEFkC2hv0wEeu\nkTHGrD72aHud1bkYNlzPVka7TY/Yw8eyqpOhuTazYe9zkJlBOQcu0yWkd/bd2R7Z\nUvH57Ve5tQKBgDLjheGFe0Lnbk15n/4/epc+/UD9kSKTmcfg5g7RIDz3NUwKNlqp\nt9e5Qr0Nd/VbFujR0jGxsqrR5EXhS9LlA7y6K4OrIRs+Dzlq5SqmmAMbAW7U2rvS\nt9EqkqVZffZIsrtos/9DEqpy3KIzrvkUTav0FSwAbS0dAX3VCdjOJV4hAoGBALYo\nRWRlkhWffyr6yEzmq+Uzx04tjVsffe2jS/gz22R0rEQE+Wg0Uqf7C24kC0w5/JyT\nMX2FEMN5Frqg3KSSnau/YW4TWy1xAfbtW4qOIIhDDtL8j0Z1FeancRdP794PjsoH\n/D6VH+TY94FJgtKvyboa17z8XaSIGveHng77s+N9AoGAOAAqwOinudIGypoxOCUy\nAq+sZGcKMaEwiSSyLcbduHWVcCwFkqBCzGpxoCJLvzgpyiqJs+wx376tneDw7Uzv\nxgxKExdijfiI/PLqONjn7+OlHXOvv4QZg6V4CwHUyNM0wOysWAeR6wjNbjhS/mYx\n4Mcv/JeLdFk2oLJfbFaxzD8=\n-----END PRIVATE KEY-----\n",
+  "client_email": "vercel-pubsub-publisher@clarity-b0t.iam.gserviceaccount.com",
+  "client_id": "111836852951508228617",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vercel-pubsub-publisher%40clarity-b0t.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

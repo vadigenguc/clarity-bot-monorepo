@@ -1,0 +1,171 @@
+__Flow: Founders' Circle Purchase & License Key Delivery__
+
+1. __User Action on Landing Page (`web/index.html`, `web/script.js`):__
+
+   - A user visits `https://www.claritypm.xyz/`.
+   - They click either the "Become a Founder" button in the hero section, the sticky header, or the Founders' Circle CTA section.
+   - The JavaScript in `web/script.js` intercepts this click and opens the custom pre-payment modal (`#purchase-modal`).
+
+2. __User Submits Details in Modal (`web/index.html`, `web/script.js`):__
+
+   - The user fills in their name, email, phone, country, and agrees to the terms in the modal.
+   - Upon clicking "Agree & Continue," the JavaScript in `web/script.js` collects this data.
+
+3. __Pre-Payment Save Netlify Function (`web/script.js` -> `netlify/functions/pre-payment-save.js`):__
+
+   - The `web/script.js` sends the collected user details to the `/.netlify/functions/pre-payment-save` endpoint.
+   - The `netlify/functions/pre-payment-save.js` function receives these details, saves them to the `founding_members` table in Supabase, and returns a unique `id` (the `client_reference_id`).
+
+4. __Redirect to Polar.sh Checkout (`web/script.js`):__
+
+   - Upon receiving the `id` from the `pre-payment-save` function, `web/script.js` constructs the final Polar.sh checkout URL, appending the `client_reference_id` to it.
+   - The user's browser is then redirected to this Polar.sh checkout page.
+
+5. __User Completes Payment on Polar.sh:__
+
+   - The user completes their purchase on the secure Polar.sh platform.
+
+6. __Polar Webhook Triggered (`Polar.sh` -> `netlify/functions/polar-license-webhook.js`):__
+
+   - After a successful payment, Polar.sh automatically sends an `order.succeeded` webhook to the dedicated endpoint configured for our __new Netlify Function__: `/.netlify/functions/polar-license-webhook`.
+
+7. __New Netlify Function Processes Webhook (`netlify/functions/polar-license-webhook.js`):__
+
+   - The `netlify/functions/polar-license-webhook.js` function receives the webhook.
+   - It verifies the webhook's authenticity using the `POLAR_WEBHOOK_SECRET`.
+   - It extracts the `customer_email` and the `tier` (product name) from the webhook payload.
+
+8. __License Key Generation (`netlify/functions/polar-license-webhook.js`):__
+
+   - The function generates a unique, cryptographically secure license key (e.g., `CLARITY-FOUNDER-a1b2c3d4-...`) using the `uuid` library.
+
+9. __Store License Key in Supabase (`netlify/functions/polar-license-webhook.js` -> `Supabase`):__
+
+   - The generated `license_key`, `customer_email`, `tier`, and an `is_redeemed: false` status are securely inserted into the `license_keys` table in your Supabase database.
+
+10. __Send Confirmation Email (`netlify/functions/polar-license-webhook.js` -> `SendGrid` -> `Customer`):__
+
+    - The function uses the `sendgrid/mail` library to send a personalized email to the `customer_email`.
+    - This email contains a welcome message, the unique license key, instructions on how to activate it in Slack after launch, and a link to the Founders' Slack community.
+
+11. __Webhook Acknowledgment (`netlify/functions/polar-license-webhook.js`):__
+
+    - The Netlify Function returns a `200 OK` response to Polar.sh, acknowledging successful receipt and processing of the webhook.
+
+
+1. __Data Collection (`web/script.js`):__
+
+   - When a user clicks "Become a Founder" on the landing page, the `web/script.js` displays a custom modal (`#purchase-modal`).
+   - The user enters their details (name, surname, email, phone, country) into this modal's form.
+   - Upon submission of this modal form, `web/script.js` collects these details.
+
+2. __Initial Storage (`web/script.js` -> `netlify/functions/pre-payment-save.js` -> `Supabase`):__
+
+   - The `web/script.js` sends this collected user data to the `/.netlify/functions/pre-payment-save` Netlify Function.
+   - The `netlify/functions/pre-payment-save.js` function is responsible for taking this data and __inserting it into the `founding_members` table in your Supabase database.__
+   - Crucially, this function generates a unique ID for this record (the `client_reference_id`) and returns it to the frontend.
+
+3. __Linking to Payment (`web/script.js` -> `Polar.sh`):__
+
+   - The `client_reference_id` received from `pre-payment-save.js` is then appended to the Polar.sh checkout URL. This ensures that when the user completes their payment on Polar.sh, the payment record can be linked back to the specific user details stored in your `founding_members` table.
+
+4. __Post-Payment Update (`Polar.sh` -> `netlify/functions/polar-webhook.js`):__
+
+   - After a successful payment on Polar.sh, a webhook is sent to `/.netlify/functions/polar-webhook.js` (or potentially the new `polar-license-webhook.js` if its logic was extended to handle this).
+   - This webhook contains the `client_reference_id`. The Netlify Function uses this ID to __find the corresponding record in the `founding_members` table and update its status__ (e.g., from "initiated" to "completed"). This confirms that the payment for that specific user's details has been successfully processed.
+
+__In summary:__ The data from the pre-payment modal is stored in your `founding_members` table in Supabase. It is then linked to the Polar.sh payment via a `client_reference_id` and updated after successful payment. This ensures you have a complete record of the user's details associated with their Founding Member purchase.
+
+
+
+Here's what happens if a user uses a different email in our pre-payment modal versus the Polar.sh payment page:
+
+1. __Our Pre-Payment Modal (`web/script.js` -> `netlify/functions/pre-payment-save.js`):__
+
+   - The user enters their details, including `email_A`, into our custom modal.
+   - This data is immediately saved to your `founding_members` table in Supabase.
+   - A unique `id` (the `client_reference_id`) is generated for this record and returned to the frontend. This `id` is now permanently associated with `email_A` and the other details the user provided in our modal.
+
+2. __Redirection to Polar.sh (`web/script.js`):__
+
+   - The user is redirected to Polar.sh, and our generated `client_reference_id` is passed along as a URL parameter.
+
+3. __Polar.sh Payment Page (User Changes Email):__
+
+   - On the Polar.sh checkout page, the user decides to use a different email, `email_B`, for their payment. This `email_B` is what Polar.sh records as the email associated with the transaction.
+
+4. __Polar Webhook (`Polar.sh` -> `netlify/functions/polar-license-webhook.js`):__
+
+   - When the payment succeeds, Polar.sh sends an `order.succeeded` webhook to our `/.netlify/functions/polar-license-webhook` endpoint.
+   - Crucially, this webhook __includes the `client_reference_id` that we originally passed to Polar.sh__, *and* it includes `email_B` (the email used on the Polar checkout page).
+
+5. __License Key Generation & Emailing (`netlify/functions/polar-license-webhook.js`):__
+
+   - Our Netlify Function receives the webhook.
+   - It uses the `client_reference_id` from the webhook to __look up the original user record in our `founding_members` table__ (which is associated with `email_A`).
+   - It then generates the unique license key.
+   - The confirmation email containing the license key is sent to __`email_B`__ (the email from the Polar webhook, as this is the email Polar considers the purchaser).
+
+6. __Post-Payment Update (`netlify/functions/polar-webhook.js` - *existing* or `polar-license-webhook.js` - *new*):__
+
+   - The `founding_members` record (associated with `email_A`) is updated using the `client_reference_id` to mark the payment as "completed." This ensures our internal CRM data is correctly updated.
+
+__In essence:__
+
+- The __`client_reference_id`__ is the robust link that ensures the payment is always correctly attributed to the user's initial details in your `founding_members` table, even if they change their email on Polar.sh.
+- The __license key will be sent to the email address (`email_B`) that the user used on the Polar.sh payment page__, as that's the email Polar.sh provides in the webhook and is the most direct contact for the actual purchase.
+- Your internal `founding_members` record (associated with `email_A`) will still be correctly updated to reflect the completed payment.
+
+This design prevents the problem of a payment being made but not being able to link it back to the user who initiated the process on your landing page.
+
+
+
+__What happens in the current system if a user makes a typo in the Polar.sh email (`email_B_typo`) and never receives the license email:__
+
+1. __Pre-Payment Modal Data (`email_A`):__ The user enters their correct email (`email_A`) and other details into our pre-payment modal. This data is saved to your `founding_members` table in Supabase, and a unique `client_reference_id` is generated and associated with this record.
+
+2. __Polar.sh Payment (`email_B_typo`):__ The user proceeds to Polar.sh, makes a typo, and completes the payment using `email_B_typo`.
+
+3. __Polar Webhook (`client_reference_id`, `email_B_typo`):__ Polar.sh sends an `order.succeeded` webhook to our `/.netlify/functions/polar-license-webhook.js` endpoint. This webhook contains the `client_reference_id` (which links back to `email_A` in `founding_members`) and the `customer_email` from Polar (`email_B_typo`).
+
+4. __License Key Generation & Storage (`netlify/functions/polar-license-webhook.js`):__
+
+   - Our Netlify Function generates the unique `license_key`.
+   - It then inserts this `license_key` into the `license_keys` table, associating it with `email_B_typo` (the `customer_email` from the webhook).
+   - __Crucially, with the current implementation, the `client_reference_id` is NOT stored in the `license_keys` table.__
+
+5. __Email Attempt:__ The function attempts to send the license key email to `email_B_typo`. If `email_B_typo` is invalid or a typo, the email will likely bounce or go to an unreachable address.
+
+6. __User Experience:__ The user completes payment but never receives their license key, leading to frustration and a support ticket.
+
+__The Gap in Current Recovery:__
+
+If the user contacts support, they would likely provide `email_A` (the correct email they used in our modal) and their name.
+
+- Support could find their record in the `founding_members` table using `email_A` and retrieve the `client_reference_id`.
+- However, because the `license_keys` table currently only stores `email_B_typo` (from Polar) and not the `client_reference_id`, it would be difficult for support to directly link `email_A` to the generated `license_key` in the `license_keys` table. They would have to manually search for the `license_key` using `email_B_typo` (if the typo was minor and they could guess it) or other indirect means, which is inefficient and error-prone.
+
+__Proposed Solution to Enhance Recovery (Critical Improvement):__
+
+To make this flow robust and supportable, we need to explicitly link the `license_keys` table to the `founding_members` record via the `client_reference_id`.
+
+__Action Plan for Improvement:__
+
+1. __Update `license_keys` Database Schema (Migration):__
+
+   - __Action__: Create a new migration file (e.g., `migrations/0009_add_client_ref_id_to_license_keys.sql`).
+   - __Content__: Add a `client_reference_id` column (TEXT, NULLABLE initially, then NOT NULL after data migration) to the `license_keys` table. This column will store the `client_reference_id` from the Polar webhook.
+
+2. __Update Netlify Function (`netlify/functions/polar-license-webhook.js`):__
+
+   - __Action__: Modify the `polar-license-webhook.js` function.
+   - __Logic__: When inserting into the `license_keys` table, ensure that the `client_reference_id` (which is available in the Polar webhook payload if configured correctly) is also stored in the new `client_reference_id` column.
+
+__How Recovery Would Work with this Improvement:__
+
+1. User contacts support with `email_A` (from our modal) and other identifying info.
+2. Support queries `founding_members` table with `email_A` to find the `client_reference_id`.
+3. Support then queries the `license_keys` table using this `client_reference_id` to retrieve the correct `license_key`.
+4. Support can then manually send the `license_key` to the user's correct email (`email_A`).
+
+This improvement is crucial for a smooth support experience and ensures data integrity across the purchase and license system.

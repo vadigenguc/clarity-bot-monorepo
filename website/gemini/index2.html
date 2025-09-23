@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clarity - Your AI Project Assistant for Slack</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0D1117;
+            color: #E6EDF3;
+            overflow-x: hidden;
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #30C6B8, #7A5AF8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+        }
+        .hero-glow {
+            box-shadow: 0 0 80px 0 rgba(122, 90, 248, 0.3), 0 0 50px 0 rgba(48, 198, 184, 0.2);
+        }
+        .feature-card {
+            border: 1px solid #30363D;
+            background: rgba(13, 17, 23, 0.5);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), 0 0 20px rgba(122, 90, 248, 0.2);
+        }
+        .cta-button {
+            background: linear-gradient(90deg, #30C6B8, #7A5AF8);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .cta-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(122, 90, 248, 0.5);
+        }
+        .scroll-animation {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .scroll-animation.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .bg-pattern {
+            background-image: radial-gradient(#161B22 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Slack Mockup Styles */
+        .slack-mockup {
+            background: #1a1d21; /* From source */
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid #2f3136; /* From source */
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+            transition: transform 0.4s ease-out;
+            position: relative;
+            min-height: 480px; /* Set a fixed height for the carousel */
+        }
+
+        .slack-mockup:hover {
+            transform: perspective(1200px) rotateY(0deg) rotateX(0deg);
+        }
+        
+        /* Carousel Styles */
+        .slide {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            bottom: 1rem;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            visibility: hidden;
+        }
+        
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+
+        .slack-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #2f3136; /* From source */
+            margin-bottom: 1rem;
+        }
+
+        .slack-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .dot-red { background: #ff5f56; }
+        .dot-yellow { background: #ffbd2e; }
+        .dot-green { background: #27ca3f; }
+        
+        .slack-title {
+            margin-left: auto;
+            color: #ffffff; /* From source */
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .message {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.25rem;
+        }
+
+        .message:last-child {
+            margin-bottom: 0;
+        }
+
+        .avatar, .avatar-bot {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .avatar {
+             background: linear-gradient(45deg, #4a9eff, #00d2ff); /* From source */
+        }
+
+        .avatar-bot {
+            background: linear-gradient(45deg, #00d2ff, #4a9eff); /* From source */
+            font-size: 1.25rem;
+        }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .username {
+            font-weight: 600;
+            color: #ffffff; /* From source */
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: #72767d;
+        }
+
+        .message-text {
+            color: #dcddde; /* From source */
+            line-height: 1.4;
+        }
+
+        .mention {
+            background: #1264a3; /* From source */
+            color: #ffffff;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .file-attachment {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: rgba(255, 255, 255, 0.03); /* From source */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* From source */
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            background: #4a9eff; /* From source */
+            border-radius: 50%; /* From source - circular */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .play-button-large {
+            color: white;
+            font-size: 1rem;
+            margin-left: 2px; /* From source */
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            color: #ffffff; /* From source */
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .file-size {
+            color: rgba(255, 255, 255, 0.6); /* From source */
+            font-size: 0.8rem;
+        }
+
+        .bot-response {
+            background: rgba(74, 158, 255, 0.1); /* From source */
+            border-left: 3px solid #4a9eff; /* From source */
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .bot-response strong {
+            color: #ffffff;
+        }
+
+        .bot-response small {
+            color: #8b949e;
+            font-size: 0.8rem;
+        }
+
+        .bot-response .actions {
+            margin-top: 0.75rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .bot-response .action-button {
+            background-color: #238636;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .bot-response .action-button.secondary {
+            background-color: #30363d;
+        }
+
+        .audio-player-full {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* From source */
+            margin-top: 0.5rem; /* From source */
+            padding: 0 0.75rem; /* From source */
+        }
+
+        .progress-track {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3); /* From source */
+            border-radius: 2px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .progress-handle {
+            position: absolute;
+            left: 20%; /* From source */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            background: #4a9eff; /* From source */
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .progress-handle::before { /* From source */
+            content: '';
+            position: absolute;
+            left: -100px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 100px;
+            height: 4px;
+            background: #4a9eff;
+            border-radius: 2px;
+        }
+
+        .audio-time { /* From source */
+            font-size: 0.75rem;
+            color: #72767d;
+        }
+        
+        /* Demo Section Mockup Styles */
+        .jira-ticket {
+            background: #0052cc;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+        
+        .ticket-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .ticket-type {
+            background: #36b37e;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .ticket-key {
+            color: #ffffff;
+            font-weight: 600;
+        }
+        
+        .ticket-title {
+            color: #ffffff;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .ticket-description {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body class="bg-pattern">
+
+    <div class="relative overflow-hidden">
+        
+        <!-- Background Glows -->
+        <div class="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/2 w-96 h-96 bg-purple-600/30 rounded-full filter blur-3xl opacity-50"></div>
+        <div class="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/2 w-96 h-96 bg-teal-500/30 rounded-full filter blur-3xl opacity-50"></div>
+
+        <!-- Header -->
+        <header class="absolute top-0 left-0 right-0 z-10 p-6">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold tracking-tight">Clarity</h1>
+                <a href="#waitlist" class="cta-button text-white font-semibold py-2 px-5 rounded-lg text-sm">Join Waitlist</a>
+            </div>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="min-h-screen flex items-center justify-center px-4 pt-20 pb-10">
+            <div class="container mx-auto max-w-7xl">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <!-- Text Content -->
+                    <div class="scroll-animation text-center md:text-left">
+                        <span class="inline-block bg-gray-800 border border-gray-700 text-teal-400 text-xs font-semibold px-3 py-1 rounded-full mb-4">For Project Managers & Product Leaders</span>
+                        <h1 class="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tighter mb-6">
+                            Your project's single source of truth, <span class="gradient-text">finally in Slack.</span>
+                        </h1>
+                        <p class="max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-gray-400 mb-10">
+                            Clarity is an AI assistant that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly. Stop searching. Start knowing.
+                        </p>
+                        <a href="#waitlist" class="cta-button hero-glow text-white font-bold py-4 px-10 rounded-lg text-lg">
+                            Get Early Access
+                        </a>
+                    </div>
+                    <!-- Slack Mockup Visual -->
+                    <div class="scroll-animation" style="transition-delay: 200ms;">
+                        <div class="slack-mockup">
+                            <!-- Slide 1: Meeting Transcription -->
+                            <div class="slide active">
+                                <div class="slack-header">
+                                    <div class="slack-dot dot-red"></div>
+                                    <div class="slack-dot dot-yellow"></div>
+                                    <div class="slack-dot dot-green"></div>
+                                    <div class="slack-title">#product-team</div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar">SM</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">Sarah (PM)</span>
+                                            <span class="timestamp">2:34 PM</span>
+                                        </div>
+                                        <div class="message-text">Hey team, here is our today's call recording. <span class="mention">@Clarity</span> please create the Jira tickets for the urgent issues.</div>
+                                        <div class="file-attachment">
+                                            <div class="file-icon">
+                                                <div class="play-button-large">▶</div>
+                                            </div>
+                                            <div class="file-info">
+                                                <div class="file-name">stand-up_sept18.mp3</div>
+                                                <div class="file-size">12:46 (22 MB)</div>
+                                            </div>
+                                        </div>
+                                        <div class="audio-player-full">
+                                            <div class="progress-track">
+                                                <div class="progress-handle" style="left: 20%;"></div>
+                                            </div>
+                                            <div class="audio-time">2:49</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar-bot">🤖</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">Clarity</span>
+                                            <span class="timestamp">2:35 PM</span>
+                                        </div>
+                                        <div class="message-text">I've analyzed the recording and drafted 2 tickets:</div>
+                                        <div class="bot-response">
+                                            <strong>PRJ-128: Shopping cart bug prevents adding multiple items.</strong><br>
+                                            <small>Bug • Due: Today • Assignee: Marcus</small>
+                                        </div>
+                                        <div class="bot-response" style="margin-top: 0.5rem;">
+                                            <strong>PRJ-129: Add support for separate billing/shipping addresses.</strong><br>
+                                            <small>Story • Due: Friday • Assignee: Emile</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Slide 2: Document Q&A -->
+                            <div class="slide">
+                                <div class="slack-header">
+                                    <div class="slack-dot dot-red"></div>
+                                    <div class="slack-dot dot-yellow"></div>
+                                    <div class="slack-dot dot-green"></div>
+                                    <div class="slack-title">#engineering</div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar" style="background: linear-gradient(45deg, #ec4899, #f97316);">DL</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">David (Dev)</span>
+                                            <span class="timestamp">11:12 AM</span>
+                                        </div>
+                                        <div class="message-text"><span class="mention">@Clarity</span> please ingest the latest project spec for the team.</div>
+                                        <div class="file-attachment">
+                                            <div class="file-icon" style="background: #ef4444;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                                            </div>
+                                            <div class="file-info">
+                                                <div class="file-name">Project_Specs_V2.pdf</div>
+                                                <div class="file-size">1.2 MB</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar-bot">🤖</div>
+                                    <div class="message-content">
+                                         <div class="message-header">
+                                            <span class="username">Clarity</span>
+                                            <span class="timestamp">11:12 AM</span>
+                                        </div>
+                                        <div class="message-text">✅ I've processed `Project_Specs_V2.pdf` and added it to the project knowledge base.</div>
+                                    </div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar">SM</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">Sarah (PM)</span>
+                                            <span class="timestamp">11:15 AM</span>
+                                        </div>
+                                        <div class="message-text"><span class="mention">@Clarity</span> how is the subscription logic implemented according to the spec?</div>
+                                    </div>
+                                </div>
+                                 <div class="message">
+                                    <div class="avatar-bot">🤖</div>
+                                    <div class="message-content">
+                                         <div class="message-header">
+                                            <span class="username">Clarity</span>
+                                            <span class="timestamp">11:15 AM</span>
+                                        </div>
+                                        <div class="bot-response">
+                                           The spec outlines a tiered model (Free, Pro, Enterprise) using Stripe. The backend will handle entitlement checks via a dedicated microservice.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Slide 3: Conversational Task Creation -->
+                            <div class="slide">
+                                <div class="slack-header">
+                                    <div class="slack-dot dot-red"></div>
+                                    <div class="slack-dot dot-yellow"></div>
+                                    <div class="slack-dot dot-green"></div>
+                                    <div class="slack-title">#qa-team</div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar" style="background: linear-gradient(45deg, #8b5cf6, #3b82f6);">KT</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">Kevin (QA)</span>
+                                            <span class="timestamp">4:02 PM</span>
+                                        </div>
+                                        <div class="message-text">Found a bug. When I add two items to the cart and remove the first one, the total doesn't update correctly.</div>
+                                    </div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar" style="background: linear-gradient(45deg, #ec4899, #f97316);">DL</div>
+                                    <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">David (Dev)</span>
+                                            <span class="timestamp">4:03 PM</span>
+                                        </div>
+                                        <div class="message-text">Oof, that's a nasty one. Good catch.</div>
+                                    </div>
+                                </div>
+                                <div class="message">
+                                    <div class="avatar" style="background: linear-gradient(45deg, #8b5cf6, #3b82f6);">KT</div>
+                                     <div class="message-content">
+                                        <div class="message-header">
+                                            <span class="username">Kevin (QA)</span>
+                                            <span class="timestamp">4:04 PM</span>
+                                        </div>
+                                        <div class="message-text"><span class="mention">@Clarity</span> create a high-priority bug ticket for this.</div>
+                                    </div>
+                                </div>
+                                 <div class="message">
+                                    <div class="avatar-bot">🤖</div>
+                                    <div class="message-content">
+                                         <div class="message-header">
+                                            <span class="username">Clarity</span>
+                                            <span class="timestamp">4:04 PM</span>
+                                        </div>
+                                        <div class="message-text">Drafted a ticket for you. Ready to create in Jira?</div>
+                                        <div class="bot-response">
+                                            <strong>BUG: Cart total fails to update after item removal.</strong><br>
+                                            <small>Project: WEB • Priority: High</small>
+                                            <div class="actions">
+                                                <span class="action-button">Create Ticket</span>
+                                                <span class="action-button secondary">Edit</span>
+                                                <span class="action-button secondary">Discard</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- The Problem / Intro -->
+        <section class="py-20 px-4">
+            <div class="container mx-auto max-w-5xl text-center">
+                <div class="scroll-animation">
+                    <h2 class="text-3xl md:text-4xl font-bold mb-4">Decisions are buried. Tasks are lost.</h2>
+                    <p class="text-lg text-gray-400 max-w-3xl mx-auto">
+                        Your team's most valuable knowledge—discussions, decisions, and next steps—is scattered across countless threads and documents. Finding what you need is a full-time job. What if it wasn't?
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="py-20 px-4">
+            <div class="container mx-auto max-w-6xl">
+                <div class="text-center mb-16 scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight">An AI that understands your <span class="gradient-text">entire project.</span></h2>
+                    <p class="text-lg text-gray-400 mt-4 max-w-2xl mx-auto">From conversation to context to completion.</p>
+                </div>
+
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Feature 1: Context Engine -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m12 20 4-4"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Contextual Awareness</h3>
+                        <p class="text-gray-400">Clarity securely listens to conversations and analyzes documents (PDFs, DOCX, etc.) to build a comprehensive, searchable knowledge base for your project.</p>
+                    </div>
+
+                    <!-- Feature 2: Transcription & Summarization -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 100ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="M12 22a6 6 0 0 0 6-6V8a6 6 0 0 0-12 0v8a6 6 0 0 0 6 6Z"/><path d="M12 12a2 2 0 1 0-2-2 2 2 0 0 0 2 2Z"/><path d="M18 12a6 6 0 0 0-6-6"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Meeting Intelligence</h3>
+                        <p class="text-gray-400">Upload any meeting recording. Clarity transcribes it with high accuracy, generates a concise summary of key decisions, and identifies all action items.</p>
+                    </div>
+                    
+                    <!-- Feature 3: Jira Automation -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 200ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M12.5 2.5a1 1 0 0 0-2 0h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/><path d="m21.5 11.5-1.9-1.9a1 1 0 0 0-1.4 0l-1.9 1.9a1 1 0 0 0 0 1.4l1.9 1.9a1 1 0 0 0 1.4 0l1.9-1.9a1 1 0 0 0 0-1.4Z"/><path d="M11.5 21.5a1 1 0 0 0 2 0h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-1a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Z"/><path d="M2.5 12.5a1 1 0 0 0 0-2h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1Z"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Effortless Jira Tickets</h3>
+                        <p class="text-gray-400">Action items are automatically drafted as Jira tickets, intelligently pre-filled with context. Approve or edit them directly in Slack. No more context switching.</p>
+                    </div>
+
+                    <!-- Feature 4: Conversational Q&A -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 300ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Conversational Q&A</h3>
+                        <p class="text-gray-400">Ask anything about your project. "How is the subscription implemented?" or "What was the last decision on the newsletter?" Get instant, accurate answers based on facts.</p>
+                    </div>
+
+                    <!-- Feature 5: Security -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 400ms;">
+                         <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Secure & Private</h3>
+                        <p class="text-gray-400">Built with enterprise-grade security. Data is isolated per workspace, and you control who has access. The bot only interacts in DMs or authorized private groups.</p>
+                    </div>
+
+                    <!-- Feature 6: Made for Leaders -->
+                     <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 500ms;">
+                         <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Built for Leaders</h3>
+                        <p class="text-gray-400">Perfect for Project Managers, Product Owners, and Scrum Masters who need to maintain momentum and ensure everyone is aligned without endless meetings.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="py-20 px-4 bg-gray-900/20">
+            <div class="container mx-auto max-w-5xl">
+                <div class="text-center mb-16 scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight">Three simple steps to clarity.</h2>
+                    <p class="text-lg text-gray-400 mt-4 max-w-2xl mx-auto">Transform your workflow in minutes.</p>
+                </div>
+                <div class="grid md:grid-cols-3 gap-12 text-center relative">
+                    <!-- Dashed line connector for desktop -->
+                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-px border-t-2 border-dashed border-gray-700" style="transform: translateY(-50px);"></div>
+                    
+                    <div class="relative scroll-animation">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-teal-400 mx-auto mb-6 shadow-lg shadow-teal-500/10">1</div>
+                        <h3 class="text-2xl font-bold mb-2">Listen & Learn</h3>
+                        <p class="text-gray-400">The bot joins your channels and learns from conversations, documents, and meeting recordings to build a comprehensive understanding of your project.</p>
+                    </div>
+                    <div class="relative scroll-animation" style="transition-delay: 150ms;">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-purple-400 mx-auto mb-6 shadow-lg shadow-purple-500/10">2</div>
+                        <h3 class="text-2xl font-bold mb-2">Extract & Analyze</h3>
+                        <p class="text-gray-400">AI identifies action items, extracts key decisions, and understands context from your team's natural conversations and uploaded files.</p>
+                    </div>
+                    <div class="relative scroll-animation" style="transition-delay: 300ms;">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-teal-400 mx-auto mb-6 shadow-lg shadow-teal-500/10">3</div>
+                        <h3 class="text-2xl font-bold mb-2">Create & Organize</h3>
+                        <p class="text-gray-400">Automatically drafts Jira tickets, lets you review and edit, then creates them with a single click. All within Slack.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Demo Section -->
+        <section class="py-20 md:py-32 px-4">
+            <div class="container mx-auto max-w-7xl">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div class="scroll-animation text-center md:text-left">
+                        <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-6">Don't miss a thing.</h2>
+                        <p class="text-lg md:text-xl text-gray-400 mb-8">
+                            From a simple question in a DM to a complete, context-aware status update in seconds. Clarity connects the dots between your conversations and your Jira board.
+                        </p>
+                        <ul class="text-left space-y-4 text-gray-300">
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Track feature requests and bug reports.</li>
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Organize sprint planning and manage technical debt.</li>
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Eliminate the need to manually create tickets from messages.</li>
+                        </ul>
+                    </div>
+                    <div class="scroll-animation" style="transition-delay: 200ms;">
+                        <div class="slack-mockup">
+                            <div class="slack-header">
+                                <div class="slack-dot dot-red"></div>
+                                <div class="slack-dot dot-yellow"></div>
+                                <div class="slack-dot dot-green"></div>
+                                <div class="slack-title">Direct Message</div>
+                            </div>
+                            <div class="message">
+                                <div class="avatar" style="background: linear-gradient(45deg, #f97316, #fde047);">JD</div>
+                                <div class="message-content">
+                                    <div class="message-header">
+                                        <span class="username">You</span>
+                                        <span class="timestamp">3:45 PM</span>
+                                    </div>
+                                    <div class="message-text">What's the current status of the user dashboard redesign task?</div>
+                                </div>
+                            </div>
+                            <div class="message">
+                                <div class="avatar-bot">🤖</div>
+                                <div class="message-content">
+                                    <div class="message-header">
+                                        <span class="username">Clarity</span>
+                                        <span class="timestamp">3:45 PM</span>
+                                    </div>
+                                    <div class="message-text">Based on recent conversations and Jira data:</div>
+                                    <div class="jira-ticket">
+                                        <div class="ticket-header">
+                                            <span class="ticket-type">STORY</span>
+                                            <span class="ticket-key">PROJ-456</span>
+                                        </div>
+                                        <div class="ticket-title">User Dashboard Redesign</div>
+                                        <div class="ticket-description">Status: In Progress<br>Assignee: Alex Chen<br>Progress: 70% complete<br>Last updated: 2 days ago<br><br>Recent activity: Wireframes approved, working on responsive layout.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Waitlist CTA Section -->
+        <section id="waitlist" class="py-20 md:py-32 px-4">
+             <div class="container mx-auto max-w-3xl text-center">
+                <div class="scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">Reclaim your focus. Ship faster.</h2>
+                    <p class="text-lg text-gray-400 mb-10 max-w-2xl mx-auto">Join the waitlist to get early access to Clarity and transform how your team manages projects in Slack.</p>
+                    
+                    <form class="max-w-md mx-auto" action="#" method="POST">
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <input type="email" name="email" required placeholder="you@company.com" class="flex-grow w-full px-5 py-3 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                            <button type="submit" class="cta-button text-white font-bold py-3 px-8 rounded-lg">Join Waitlist</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Footer -->
+        <footer class="text-center py-10 border-t border-gray-800">
+            <p class="text-gray-500">&copy; 2025 Clarity AI. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Simple scroll animation
+        const scrollElements = document.querySelectorAll('.scroll-animation');
+
+        const elementInView = (el, dividend = 1) => {
+            const elementTop = el.getBoundingClientRect().top;
+            return (
+                elementTop <= (window.innerHeight || document.documentElement.clientHeight) / dividend
+            );
+        };
+
+        const displayScrollElement = (element) => {
+            element.classList.add('visible');
+        };
+
+        const hideScrollElement = (element) => {
+            element.classList.remove('visible');
+        }
+
+        const handleScrollAnimation = () => {
+            scrollElements.forEach((el) => {
+                if (elementInView(el, 1.25)) {
+                    displayScrollElement(el);
+                }
+            })
+        }
+
+        window.addEventListener('scroll', () => {
+            handleScrollAnimation();
+        });
+        
+        // Trigger on load for elements already in view
+        handleScrollAnimation();
+        
+        // Hero Carousel Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const slides = document.querySelectorAll('.slack-mockup .slide');
+            let currentSlide = 0;
+
+            if (slides.length > 0) {
+                setInterval(() => {
+                    slides[currentSlide].classList.remove('active');
+                    currentSlide = (currentSlide + 1) % slides.length;
+                    slides[currentSlide].classList.add('active');
+                }, 5000); // 4s display + 1s transition
+            }
+        });
+    </script>
+</body>
+</html>
+
