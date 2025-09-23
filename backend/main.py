@@ -24,24 +24,6 @@ from google.cloud import pubsub_v1
 # OpenAI for Whisper transcription
 from openai import AsyncOpenAI
 
-# OpenAI for Whisper transcription
-from openai import AsyncOpenAI
-
-# For audio processing (splitting large files)
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
-import asyncio # Import asyncio for running async functions in a sync context
-import uuid # For generating unique license keys
-from datetime import datetime, timezone # Import datetime and timezone
-import json # For serializing job payloads
-
-import polar_sdk
-from polar_sdk import Polar, models
-from polar_sdk.webhooks import Webhook, WebhookType
-
-# OpenAI for Whisper transcription
-from openai import AsyncOpenAI
-
 # For audio processing (splitting large files)
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
@@ -55,9 +37,6 @@ from pdfminer.high_level import extract_text as extract_text_from_pdf
 from docx import Document
 import openpyxl
 import pandas as pd
-
-# Vectorization
-from sentence_transformers import SentenceTransformer
 
 # Vectorization
 from sentence_transformers import SentenceTransformer
@@ -199,22 +178,11 @@ async def polar_license_webhook(request: Request):
 # --- Vectorization and Document Processing Functions ---
 
 # Load Sentence Transformer model globally
-# Specify the custom cache directory where the model was downloaded by build.sh
-MODEL_CACHE_DIR = "./.cache/sentence_transformers"
-MODEL_NAME = "all-MiniLM-L6-v2"
-
 try:
-    # Ensure the cache directory exists before trying to load
-    if not os.path.exists(MODEL_CACHE_DIR):
-        logger.warning(f"Model cache directory {MODEL_CACHE_DIR} not found. Attempting to create and download model.")
-        os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
-        # If the directory wasn't there, try to download it now (might still cause OOM if not handled by build.sh)
-        embedding_model = SentenceTransformer(MODEL_NAME, cache_folder=MODEL_CACHE_DIR)
-    else:
-        embedding_model = SentenceTransformer(MODEL_NAME, cache_folder=MODEL_CACHE_DIR)
-    logger.info(f"SentenceTransformer model '{MODEL_NAME}' loaded successfully from {MODEL_CACHE_DIR}.")
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    logger.info("SentenceTransformer model 'all-MiniLM-L6-v2' loaded successfully.")
 except Exception as e:
-    logger.error(f"Error loading SentenceTransformer model '{MODEL_NAME}' from {MODEL_CACHE_DIR}: {e}")
+    logger.error(f"Error loading SentenceTransformer model: {e}")
     embedding_model = None # Handle case where model fails to load
 
 def get_embedding(text: str):
@@ -730,22 +698,7 @@ async def handle_app_home_opened(client, event, logger, context):
         )
     except Exception as e:
         logger.error(f"Error handling app_home_opened event for user {user_id}: {e}")
-        # Fallback message
-        await client.views_publish(
-            user_id=user_id,
-            view={
-                "type": "home",
-                "blocks": [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"Hello, <@{user_id}>! I'm Clarity. An error occurred loading your App Home. Please try again later."
-                        }
-                    }
-                ]
-            }
-        )
+        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred loading your App Home. Please try again later.")
 
 @slack_app.action("open_license_activation_modal")
 async def open_license_modal(ack, body, client, logger):
@@ -990,14 +943,10 @@ async def list_authorized_users(ack, body, say, logger, client, context): # Add 
         logger.error(f"Error handling /bot-list-authorized command: {e}")
         await slack_app.client.chat_postMessage(channel=channel_id, text=f"An error occurred while listing authorized users: {e}") # Use chat_postMessage
 
-@slack_app.view("activate_license_modal")
-async def handle_activate_license_modal_submission(ack, body, client, logger):
-    await ack()
-    logger.info(f"Received activate_license_modal submission: {body}")
-
-    license_key = body["view"]["state"]["values"]["license_key_input_block"]["license_key_input"]["value"]
-    user_id = body["user"]["id"]
-    team_id = body["team"]["id"]
+@slack_app.event("app_home_opened")
+async def handle_app_home_opened(client, event, logger, context):
+    user_id = event["user"]
+    team_id = event["team"]
 
     try:
         options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": "none"})
@@ -1006,60 +955,678 @@ async def handle_activate_license_modal_submission(ack, body, client, logger):
             supabase_service_role_key,
             options=options
         )
-
-        # 1. Validate license key
-        license_response = await asyncio.to_thread(
-            rls_supabase_client.from_('license_keys')
-            .select('*')
-            .eq('license_key', license_key)
-            .single()
-            .execute
+        
+        # Check if the workspace is a Founder
+        subscription_response = await asyncio.to_thread(
+            rls_supabase_client.from_('workspace_subscriptions').select('plan_id').eq('workspace_id', team_id).single().execute
         )
         
-        license_data = license_response.data
-        
-        if not license_data:
-            await client.chat_postMessage(channel=user_id, text="❌ Invalid license key. Please check your key and try again.")
-            return
+        is_founder = False
+        if subscription_response.data and subscription_response.data['plan_id'] == 'Founder':
+            is_founder = True
 
-        if license_data['is_redeemed']:
-            await client.chat_postMessage(channel=user_id, text="❌ This license key has already been redeemed.")
-            return
+        if not is_founder:
+            # Display activation button if not a founder
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Welcome, <@{user_id}>! Unlock your exclusive Founder benefits."
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Activate Founder Membership",
+                                "emoji": True
+                            },
+                            "style": "primary",
+                            "action_id": "open_license_activation_modal"
+                        }
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Already a Founder? Use `/clarity-activate` to submit your key."
+                    }
+                }
+            ]
+        else:
+            # Display a welcome message for Founders
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Welcome back, Founder <@{user_id}>! Your exclusive membership is active. How can I assist your project today?"
+                    }
+                }
+            ]
 
-        # 2. Update workspace subscription to 'Founder' tier
+        await client.views_publish(
+            user_id=user_id,
+            view={
+                "type": "home",
+                "blocks": blocks
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error handling app_home_opened event for user {user_id}: {e}")
+        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred loading your App Home. Please try again later.")
+
+@slack_app.action("open_license_activation_modal")
+async def open_license_modal(ack, body, client, logger):
+    await ack()
+    logger.info(f"Received open_license_activation_modal action: {body}")
+
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "activate_license_modal",
+            "title": {
+                "type": "plain_text",
+                "text": "Activate Founder Membership"
+            },
+            "submit": {
+                "type": "plain_text",
+                "text": "Activate"
+            },
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "license_key_input_block",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Enter your Founder License Key"
+                    },
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "license_key_input",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."
+                        },
+                        "min_length": 10 # Basic validation
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "Your unique key was sent to your email after purchase."
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+@slack_app.command("/clarity-activate")
+async def clarity_activate_command(ack, body, client, logger):
+    await ack()
+    logger.info(f"Received /clarity-activate command: {body}")
+
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "activate_license_modal",
+            "title": {
+                "type": "plain_text",
+                "text": "Activate Founder Membership"
+            },
+            "submit": {
+                "type": "plain_text",
+                "text": "Activate"
+            },
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "license_key_input_block",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Enter your Founder License Key"
+                    },
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "license_key_input",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."
+                        },
+                        "min_length": 10
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "Your unique key was sent to your email after purchase."
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+@slack_app.command("/bot-grant-access")
+async def grant_access(ack, body, say, logger, client):
+    await ack()
+    logger.info(f"Received /bot-grant-access command: {body}")
+
+    user_text_to_grant = body.get("text", "").strip()
+    requesting_user_id = body["user_id"]
+    team_id = body["team_id"]
+    channel_id = body["channel_id"]
+
+    if not await is_user_admin(requesting_user_id, client):
+        await say("This command can only be used by workspace admins.")
+        return
+
+    if not user_text_to_grant:
+        await say("Please provide a user. Usage: `/bot-grant-access @user`")
+        return
+
+    parsed_user_id = None
+    if user_text_to_grant.startswith('<@U'):
+        parsed_user_id = user_text_to_grant.split('|')[0].strip('<@>')
+    elif user_text_to_grant.startswith('@'):
+        username = user_text_to_grant.strip('@')
+        parsed_user_id = await find_user_id_by_name(username, client)
+        if not parsed_user_id:
+            await say(f"Could not find a user with the name `{username}`.")
+            return
+    else:
+        await say("Please provide a valid user mention or username (e.g., `@user`).")
+        return
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
+
         await asyncio.to_thread(
-            rls_supabase_client.from_('workspace_subscriptions')
-            .update({'plan_id': license_data['tier']}) # Use the tier from the license key
+            rls_supabase_client.from_('authorized_users').insert({
+                'workspace_id': team_id,
+                'user_id': parsed_user_id
+            }).execute
+        )
+        await say(f"Access granted to <@{parsed_user_id}>.")
+    except Exception as e:
+        if "violates unique constraint" in str(e):
+            await say(f"<@{parsed_user_id}> is already an authorized user.")
+        else:
+            logger.error(f"Error granting access: {e}")
+            await say(f"An error occurred while granting access: {e}")
+
+@slack_app.command("/bot-revoke-access")
+async def revoke_access(ack, body, say, logger, client):
+    await ack()
+    logger.info(f"Received /bot-revoke-access command: {body}")
+
+    user_text_to_revoke = body.get("text", "").strip()
+    requesting_user_id = body["user_id"]
+    team_id = body["team_id"]
+    channel_id = body["channel_id"]
+
+    if not await is_user_admin(requesting_user_id, client):
+        await say("This command can only be used by workspace admins.")
+        return
+
+    if not user_text_to_revoke:
+        await say("Please provide a user. Usage: `/bot-revoke-access @user`")
+        return
+
+    parsed_user_id = None
+    if user_text_to_revoke.startswith('<@U'):
+        parsed_user_id = user_text_to_revoke.split('|')[0].strip('<@>')
+    elif user_text_to_revoke.startswith('@'):
+        username = user_text_to_revoke.strip('@')
+        parsed_user_id = await find_user_id_by_name(username, client)
+        if not parsed_user_id:
+            await say(f"Could not find a user with the name `{username}`.")
+            return
+    else:
+        await say("Please provide a valid user mention or username (e.g., `@user`).")
+        return
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
+
+        response = await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users')
+            .delete()
             .eq('workspace_id', team_id)
+            .eq('user_id', parsed_user_id)
             .execute
         )
-
-        # 3. Mark license key as redeemed
-        await asyncio.to_thread(
-            rls_supabase_client.from_('license_keys')
-            .update({
-                'is_redeemed': True,
-                'redeemed_by_workspace_id': team_id,
-                'redeemed_by_user_id': user_id,
-                'redeemed_at': datetime.now(timezone.utc) # Use timezone-aware datetime
-            })
-            .eq('license_key', license_key)
-            .execute
-        )
-
-        # 4. Send confirmation message
-        await client.chat_postMessage(
-            channel=user_id,
-            text=f"🎉 Welcome, Founder <@{user_id}>! Your exclusive membership has been activated. Thank you for being one of our first supporters!"
-        )
+        
+        if response.data:
+            await say(f"Access revoked for <@{parsed_user_id}>.")
+        else:
+            await say(f"<@{parsed_user_id}> was not found in the authorized users list.")
 
     except Exception as e:
-        logger.error(f"Error activating license for user {user_id} in workspace {team_id}: {e}")
-        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred during activation: {e}")
+        logger.error(f"Error revoking access: {e}")
+        await say(f"An error occurred while revoking access: {e}")
 
-# You can add more routes and logic here as per the development plan.
-# For example, Slack event handlers, Jira integration, etc.
+@slack_app.command("/bot-list-authorized")
+async def list_authorized_users(ack, body, say, logger, client, context): # Add client and context
+    await ack()
+    logger.info(f"Received /bot-list-authorized command: {body}")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, reload=True)
+    user_id = body["user_id"]
+    team_id = body["team_id"]
+
+    # First, check if the user is an admin
+    user_is_admin = await is_user_admin(user_id, client)
+    if not user_is_admin:
+        await say("This command can only be used by workspace admins.")
+        return
+
+    # If the user is an admin, proceed without the standard authorization check
+    channel_id = body["channel_id"]
+
+    try:
+        # Create the RLS Supabase client since we bypassed the main auth check
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(
+            supabase_url, 
+            supabase_service_role_key,
+            options=options
+        )
+
+        response = await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users').select('user_id').eq('workspace_id', team_id).execute
+        )
+        authorized_users = response.data
+
+        if authorized_users:
+            user_ids = [user['user_id'] for user in authorized_users]
+            user_mentions = [f"<@{user_id}>" for user_id in user_ids]
+            message = f"Authorized users for this workspace: {', '.join(user_mentions)}"
+        else:
+            message = "No authorized users found for this workspace."
+
+        await slack_app.client.chat_postMessage(channel=channel_id, text=message) # Use chat_postMessage
+
+    except Exception as e:
+        logger.error(f"Error handling /bot-list-authorized command: {e}")
+        await slack_app.client.chat_postMessage(channel=channel_id, text=f"An error occurred while listing authorized users: {e}") # Use chat_postMessage
+
+@slack_app.event("app_home_opened")
+async def handle_app_home_opened(client, event, logger, context):
+    user_id = event["user"]
+    team_id = event["team"]
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": "none"})
+        rls_supabase_client = create_client(
+            supabase_url, 
+            supabase_service_role_key,
+            options=options
+        )
+        
+        # Check if the workspace is a Founder
+        subscription_response = await asyncio.to_thread(
+            rls_supabase_client.from_('workspace_subscriptions').select('plan_id').eq('workspace_id', team_id).single().execute
+        )
+        
+        is_founder = False
+        if subscription_response.data and subscription_response.data['plan_id'] == 'Founder':
+            is_founder = True
+
+        if not is_founder:
+            # Display activation button if not a founder
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Welcome, <@{user_id}>! Unlock your exclusive Founder benefits."
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Activate Founder Membership",
+                                "emoji": True
+                            },
+                            "style": "primary",
+                            "action_id": "open_license_activation_modal"
+                        }
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Already a Founder? Use `/clarity-activate` to submit your key."
+                    }
+                }
+            ]
+        else:
+            # Display a welcome message for Founders
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Welcome back, Founder <@{user_id}>! Your exclusive membership is active. How can I assist your project today?"
+                    }
+                }
+            ]
+
+        await client.views_publish(
+            user_id=user_id,
+            view={
+                "type": "home",
+                "blocks": blocks
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error handling app_home_opened event for user {user_id}: {e}")
+        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred loading your App Home. Please try again later.")
+
+@slack_app.action("open_license_activation_modal")
+async def open_license_modal(ack, body, client, logger):
+    await ack()
+    logger.info(f"Received open_license_activation_modal action: {body}")
+
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "activate_license_modal",
+            "title": {
+                "type": "plain_text",
+                "text": "Activate Founder Membership"
+            },
+            "submit": {
+                "type": "plain_text",
+                "text": "Activate"
+            },
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "license_key_input_block",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Enter your Founder License Key"
+                    },
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "license_key_input",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."
+                        },
+                        "min_length": 10 # Basic validation
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "Your unique key was sent to your email after purchase."
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+@slack_app.command("/clarity-activate")
+async def clarity_activate_command(ack, body, client, logger):
+    await ack()
+    logger.info(f"Received /clarity-activate command: {body}")
+
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "activate_license_modal",
+            "title": {
+                "type": "plain_text",
+                "text": "Activate Founder Membership"
+            },
+            "submit": {
+                "type": "plain_text",
+                "text": "Activate"
+            },
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "license_key_input_block",
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Enter your Founder License Key"
+                    },
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "license_key_input",
+                        "placeholder": {
+                            "type": "plain_text",
+                            "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."
+                        },
+                        "min_length": 10
+                    }
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "Your unique key was sent to your email after purchase."
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+@slack_app.command("/bot-grant-access")
+async def grant_access(ack, body, say, logger, client):
+    await ack()
+    logger.info(f"Received /bot-grant-access command: {body}")
+
+    user_text_to_grant = body.get("text", "").strip()
+    requesting_user_id = body["user_id"]
+    team_id = body["team_id"]
+    channel_id = body["channel_id"]
+
+    if not await is_user_admin(requesting_user_id, client):
+        await say("This command can only be used by workspace admins.")
+        return
+
+    if not user_text_to_grant:
+        await say("Please provide a user. Usage: `/bot-grant-access @user`")
+        return
+
+    parsed_user_id = None
+    if user_text_to_grant.startswith('<@U'):
+        parsed_user_id = user_text_to_grant.split('|')[0].strip('<@>')
+    elif user_text_to_grant.startswith('@'):
+        username = user_text_to_grant.strip('@')
+        parsed_user_id = await find_user_id_by_name(username, client)
+        if not parsed_user_id:
+            await say(f"Could not find a user with the name `{username}`.")
+            return
+    else:
+        await say("Please provide a valid user mention or username (e.g., `@user`).")
+        return
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
+
+        await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users').insert({
+                'workspace_id': team_id,
+                'user_id': parsed_user_id
+            }).execute
+        )
+        await say(f"Access granted to <@{parsed_user_id}>.")
+    except Exception as e:
+        if "violates unique constraint" in str(e):
+            await say(f"<@{parsed_user_id}> is already an authorized user.")
+        else:
+            logger.error(f"Error granting access: {e}")
+            await say(f"An error occurred while granting access: {e}")
+
+@slack_app.command("/bot-revoke-access")
+async def revoke_access(ack, body, say, logger, client):
+    await ack()
+    logger.info(f"Received /bot-revoke-access command: {body}")
+
+    user_text_to_revoke = body.get("text", "").strip()
+    requesting_user_id = body["user_id"]
+    team_id = body["team_id"]
+    channel_id = body["channel_id"]
+
+    if not await is_user_admin(requesting_user_id, client):
+        await say("This command can only be used by workspace admins.")
+        return
+
+    if not user_text_to_revoke:
+        await say("Please provide a user. Usage: `/bot-revoke-access @user`")
+        return
+
+    parsed_user_id = None
+    if user_text_to_revoke.startswith('<@U'):
+        parsed_user_id = user_text_to_revoke.split('|')[0].strip('<@>')
+    elif user_text_to_revoke.startswith('@'):
+        username = user_text_to_revoke.strip('@')
+        parsed_user_id = await find_user_id_by_name(username, client)
+        if not parsed_user_id:
+            await say(f"Could not find a user with the name `{username}`.")
+            return
+    else:
+        await say("Please provide a valid user mention or username (e.g., `@user`).")
+        return
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
+
+        response = await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users')
+            .delete()
+            .eq('workspace_id', team_id)
+            .eq('user_id', parsed_user_id)
+            .execute
+        )
+        
+        if response.data:
+            await say(f"Access revoked for <@{parsed_user_id}>.")
+        else:
+            await say(f"<@{parsed_user_id}> was not found in the authorized users list.")
+
+    except Exception as e:
+        logger.error(f"Error revoking access: {e}")
+        await say(f"An error occurred while revoking access: {e}")
+
+@slack_app.command("/bot-list-authorized")
+async def list_authorized_users(ack, body, say, logger, client, context): # Add client and context
+    await ack()
+    logger.info(f"Received /bot-list-authorized command: {body}")
+
+    user_id = body["user_id"]
+    team_id = body["team_id"]
+
+    # First, check if the user is an admin
+    user_is_admin = await is_user_admin(user_id, client)
+    if not user_is_admin:
+        await say("This command can only be used by workspace admins.")
+        return
+
+    # If the user is an admin, proceed without the standard authorization check
+    channel_id = body["channel_id"]
+
+    try:
+        # Create the RLS Supabase client since we bypassed the main auth check
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(
+            supabase_url, 
+            supabase_service_role_key,
+            options=options
+        )
+
+        response = await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users').select('user_id').eq('workspace_id', team_id).execute
+        )
+        authorized_users = response.data
+
+        if authorized_users:
+            user_ids = [user['user_id'] for user in authorized_users]
+            user_mentions = [f"<@{user_id}>" for user_id in user_ids]
+            message = f"Authorized users for this workspace: {', '.join(user_mentions)}"
+        else:
+            message = "No authorized users found for this workspace."
+
+        await slack_app.client.chat_postMessage(channel=channel_id, text=message) # Use chat_postMessage
+
+    except Exception as e:
+        logger.error(f"Error handling /bot-list-authorized command: {e}")
+        await slack_app.client.chat_postMessage(channel=channel_id, text=f"An error occurred while listing authorized users: {e}") # Use chat_postMessage
+
+@slack_app.event("app_home_opened")
+async def handle_app_home_opened(client, event, logger, context):
+    user_id = event["user"]
+    team_id = event["team"]
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": "none"})
+        rls_supabase_client = create_client(
+            supabase_url, 
+            supabase_service_role_key,
+            options=options
+        )
+        
+        # Check if the workspace is a Founder
+        subscription_response = await asyncio.to_thread(
+            rls_supabase_client.from_('workspace_subscriptions').select('plan_id').eq('workspace_id', team_id).single().execute
+        )
+        
+        is_founder = False
+        if subscription_response.data and subscription_response.data['plan_id'] == 'Founder':
+            is_founder = True
+
+        if not is_founder:
+            # Display activation button if not a founder
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Welcome, <@{user_id}>! Unlock your exclusive Founder benefits."
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Activate Founder Membership",
+                                "emoji": True
+                            },
+                            "style": "primary",
+                            "action_id": "open_license_activation_modal"
+                        }

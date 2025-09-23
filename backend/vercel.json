@@ -2,13 +2,10 @@
   "version": 2,
   "builds": [
     {
-      "src": "main.py",
-      "use": "@vercel/python",
+      "src": "Dockerfile",
+      "use": "@vercel/docker",
       "config": {
-        "maxLambdaSize": "15mb",
-        "runtime": "python3.10",
-        "memory": 3008,
-        "maxDuration": 300
+        "image": "gcr.io/<YOUR_GCP_PROJECT_ID>/clarity-backend:latest"
       }
     }
   ],
@@ -17,6 +14,5 @@
       "src": "/(.*)",
       "dest": "main.py"
     }
-  ],
-  "installCommand": "pip install --no-cache-dir -r requirements.txt"
+  ]
 }
