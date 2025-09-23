@@ -1,3 +1,4 @@
 google-cloud-pubsub
 openai
 pydub
+python-dotenv
