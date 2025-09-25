@@ -27,9 +27,6 @@ from docx import Document
 import openpyxl
 import pandas as pd
 
-# Vectorization
-from sentence_transformers import SentenceTransformer
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -44,20 +41,36 @@ supabase_service_role_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(supabase_url, supabase_service_role_key)
 
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-PUBSUB_TOPIC_NAME = "clarity-transcription-jobs" # Name of the Pub/Sub topic
+PUBSUB_TRANSCRIPTION_TOPIC_NAME = "clarity-transcription-jobs" # Name of the Pub/Sub topic for transcription
+PUBSUB_EMBEDDING_TOPIC_NAME = "clarity-embedding-jobs" # Name of the Pub/Sub topic for embeddings
 
-def get_pubsub_publisher_client():
-    """Initializes and returns a Pub/Sub publisher client."""
-    if not GCP_PROJECT_ID:
-        logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub will not function.")
-        return None
-    return pubsub_v1.PublisherClient()
+# Lazy initialization for Pub/Sub publisher clients
+_pubsub_transcription_publisher = None
+_pubsub_embedding_publisher = None
+_pubsub_transcription_topic_path = None
+_pubsub_embedding_topic_path = None
 
-def get_pubsub_topic_path(publisher_client):
-    """Returns the full Pub/Sub topic path."""
-    if not GCP_PROJECT_ID or not publisher_client:
-        return None
-    return publisher_client.topic_path(GCP_PROJECT_ID, PUBSUB_TOPIC_NAME)
+def get_pubsub_transcription_publisher_client():
+    global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
+    if _pubsub_transcription_publisher is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription publisher will not function.")
+            return None, None
+        _pubsub_transcription_publisher = pubsub_v1.PublisherClient()
+        _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
+        logger.info("Pub/Sub transcription publisher client initialized.")
+    return _pubsub_transcription_publisher, _pubsub_transcription_topic_path
+
+def get_pubsub_embedding_publisher_client():
+    global _pubsub_embedding_publisher, _pubsub_embedding_topic_path
+    if _pubsub_embedding_publisher is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding publisher will not function.")
+            return None, None
+        _pubsub_embedding_publisher = pubsub_v1.PublisherClient()
+        _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
+        logger.info("Pub/Sub embedding publisher client initialized.")
+    return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
 
 # Import LLM Service Manager and Prompt Loader
 from backend.services.llm_service import llm_service_manager
@@ -144,19 +157,10 @@ class WaitlistRequest(BaseModel):
 
 # --- Vectorization and Document Processing Functions ---
 
-# Load Sentence Transformer model globally
-try:
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    logger.info("SentenceTransformer model 'all-MiniLM-L6-v2' loaded successfully.")
-except Exception as e:
-    logger.error(f"Error loading SentenceTransformer model: {e}")
-    embedding_model = None # Handle case where model fails to load
-
+# Placeholder for embedding generation (now handled by worker)
 def get_embedding(text: str):
-    if embedding_model:
-        return embedding_model.encode(text).tolist()
-    logger.error("Embedding model not loaded. Cannot generate embedding.")
-    return None
+    logger.warning("Embedding generation is offloaded to worker. This function should not be called directly.")
+    return [] # Return empty list as placeholder
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
     """Splits text into chunks with optional overlap."""
@@ -216,24 +220,25 @@ async def process_and_store_content(
 
     chunks = chunk_text(content_text)
     for i, chunk in enumerate(chunks):
-        embedding = get_embedding(chunk)
-        if embedding:
+        # Instead of generating embedding here, publish an embedding job to Pub/Sub
+        embedding_job_payload = {
+            "workspace_id": workspace_id,
+            "channel_id": channel_id,
+            "source_type": source_type,
+            "source_id": f"{source_id}_chunk_{i}",
+            "content": chunk
+        }
+        
+        publisher, topic_path = get_pubsub_embedding_publisher_client()
+        if publisher and topic_path:
             try:
-                await asyncio.to_thread(
-                    rls_supabase_client.from_('document_embeddings').insert({
-                        'workspace_id': workspace_id,
-                        'channel_id': channel_id,
-                        'source_type': source_type,
-                        'source_id': f"{source_id}_chunk_{i}",
-                        'content': chunk,
-                        'embedding': embedding
-                    }).execute
-                )
-                logger.info(f"Chunk {i} for {source_type} {source_id} in channel {channel_id} stored in document_embeddings.")
+                future = publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
+                future.result() # Wait for the publish call to complete
+                logger.info(f"Published embedding job for chunk {i} of {source_type} {source_id} to Pub/Sub topic: {topic_path}")
             except Exception as e:
-                logger.error(f"Error storing embedding for chunk {i} of {source_type} {source_id} in channel {channel_id}: {e}")
+                logger.error(f"Error publishing embedding job for chunk {i} of {source_type} {source_id}: {e}")
         else:
-            logger.warning(f"Could not generate embedding for chunk {i} of {source_type} {source_id} in channel {channel_id}.")
+            logger.error(f"Pub/Sub embedding topic path not configured. Cannot offload embedding for chunk {i} of {source_type} {source_id}.")
 
 # --- Authorization Logic ---
 
@@ -522,14 +527,15 @@ async def handle_file_shared(event, say, logger, context):
                             "file_type": file_type
                         }
                         
-                        if PUBSUB_TOPIC_PATH:
+                        publisher, topic_path = get_pubsub_transcription_publisher_client()
+                        if publisher and topic_path:
                             # Publish the job payload to Pub/Sub
-                            future = publisher.publish(PUBSUB_TOPIC_PATH, json.dumps(job_payload).encode("utf-8"))
+                            future = publisher.publish(topic_path, json.dumps(job_payload).encode("utf-8"))
                             future.result() # Wait for the publish call to complete
-                            logger.info(f"Large file ({file_size / (1024*1024):.2f} MB) detected. Pushed transcription job to Pub/Sub topic: {PUBSUB_TOPIC_PATH}")
+                            logger.info(f"Large file ({file_size / (1024*1024):.2f} MB) detected. Pushed transcription job to Pub/Sub topic: {topic_path}")
                             await say(f"⏳ Your large audio/video file `{file_name}` is being processed in the background. I'll notify you when the transcription is complete!")
                         else:
-                            logger.error("Pub/Sub topic path not configured. Cannot queue large file for transcription.")
+                            logger.error("Pub/Sub transcription topic path not configured. Cannot queue large file for transcription.")
                             await say(f"❌ Failed to process large file `{file_name}`: Server configuration error (Pub/Sub not set up).")
                     else:
                         # For small files, download and transcribe directly
