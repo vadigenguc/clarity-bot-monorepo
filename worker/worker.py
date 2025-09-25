@@ -9,11 +9,14 @@ from dotenv import load_dotenv
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
-from openai import AsyncOpenAI
 from supabase import create_client, Client, ClientOptions
 
 # Google Cloud Pub/Sub for job queuing
 from google.cloud import pubsub_v1
+
+# Import LLM Service Manager and Prompt Loader
+from backend.services.llm_service import llm_service_manager
+from backend.utils.prompt_loader import load_prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,11 +29,6 @@ load_dotenv()
 supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_service_role_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(supabase_url, supabase_service_role_key)
-
-# Initialize OpenAI client
-openai_client = AsyncOpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
 
 # Define chunk size for Whisper API (max 25MB)
 WHISPER_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 # 25 MB
@@ -80,14 +78,18 @@ async def split_audio_into_chunks(audio_content: bytes, file_type: str) -> list[
     return chunks
 
 async def transcribe_audio_chunk(audio_chunk_io: io.BytesIO, chunk_name: str) -> str | None:
-    """Transcribes a single audio chunk using OpenAI Whisper."""
+    """Transcribes a single audio chunk using OpenAI Whisper via LLMServiceManager."""
     try:
-        audio_chunk_io.name = chunk_name # OpenAI API expects a name
-        transcript = await openai_client.audio.transcriptions.create(
-            model="whisper-1", 
-            file=audio_chunk_io
+        # Ensure the file-like object has a 'name' attribute for the LLMServiceManager
+        audio_chunk_io.name = chunk_name 
+        
+        # Use the LLMServiceManager for transcription
+        # Assuming 'whisper-1' is an OpenAI model, prefix with 'openai-'
+        transcript_text = await llm_service_manager.generate_text(
+            model_name="openai-whisper-1", 
+            prompt=audio_chunk_io # Pass the file-like object directly
         )
-        return transcript.text
+        return transcript_text
     except Exception as e:
         logger.error(f"Error transcribing audio chunk '{chunk_name}': {e}")
         return None
@@ -192,7 +194,23 @@ async def process_transcription_job(job_payload: dict):
             rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
             await process_and_store_content(workspace_id, channel_id, 'transcription', file_id, full_transcript, rls_supabase_client)
             
-            await send_slack_message(channel_id, user_id, f"✅ Your transcription for `{file_name}` is complete! It has been added to the project knowledge base.", slack_bot_token)
+            # Load summarization prompt
+            summarization_prompt = load_prompt("summarization_prompt")
+            logger.info(f"Worker: Generating summary for {file_name}...")
+            summary = await llm_service_manager.summarize_text(full_transcript, summarization_prompt)
+
+            if summary:
+                logger.info(f"Worker: Summary generated for {file_name}. Storing in Supabase and sending to Slack...")
+                await process_and_store_content(workspace_id, channel_id, 'summary', file_id, summary, rls_supabase_client)
+                
+                # Send initial message about transcription completion
+                await send_slack_message(channel_id, user_id, f"✅ Your transcription for `{file_name}` is complete! It has been added to the project knowledge base.", slack_bot_token)
+                
+                # Send summary as a threaded reply
+                await send_slack_message(channel_id, user_id, f"📝 Here's a summary of `{file_name}`:\n\n{summary}", slack_bot_token)
+            else:
+                logger.warning(f"Worker: No summary generated for {file_name}.")
+                await send_slack_message(channel_id, user_id, f"⚠️ Transcription complete for `{file_name}`, but summary generation failed.", slack_bot_token)
         else:
             logger.warning(f"Worker: No transcript generated for {file_name}.")
             await send_slack_message(channel_id, user_id, f"❌ Transcription failed for `{file_name}`: No text could be extracted.", slack_bot_token)
@@ -202,18 +220,29 @@ async def process_transcription_job(job_payload: dict):
         await send_slack_message(channel_id, user_id, f"❌ An error occurred during transcription for `{file_name}`: {e}", slack_bot_token)
 
 
-# Initialize Google Cloud Pub/Sub subscriber client
-subscriber = pubsub_v1.SubscriberClient()
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-if not GCP_PROJECT_ID:
-    logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub subscriber will not function.")
 PUBSUB_SUBSCRIPTION_NAME = "clarity-transcription-jobs-sub" # Name of the Pub/Sub subscription
-PUBSUB_SUBSCRIPTION_PATH = subscriber.subscription_path(GCP_PROJECT_ID, PUBSUB_SUBSCRIPTION_NAME) if GCP_PROJECT_ID else None
+
+def get_pubsub_subscriber_client():
+    """Initializes and returns a Pub/Sub subscriber client."""
+    if not GCP_PROJECT_ID:
+        logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub subscriber will not function.")
+        return None
+    return pubsub_v1.SubscriberClient()
+
+def get_pubsub_subscription_path(subscriber_client):
+    """Returns the full Pub/Sub subscription path."""
+    if not GCP_PROJECT_ID or not subscriber_client:
+        return None
+    return subscriber_client.subscription_path(GCP_PROJECT_ID, PUBSUB_SUBSCRIPTION_NAME)
 
 async def main_worker_loop():
     """Main loop for the Cloud Run Job to pull and process messages."""
-    if not PUBSUB_SUBSCRIPTION_PATH:
-        logger.error("Pub/Sub subscription path not configured. Exiting worker.")
+    subscriber = get_pubsub_subscriber_client()
+    PUBSUB_SUBSCRIPTION_PATH = get_pubsub_subscription_path(subscriber)
+
+    if not subscriber or not PUBSUB_SUBSCRIPTION_PATH:
+        logger.error("Pub/Sub subscriber or subscription path not configured. Exiting worker.")
         return
 
     logger.info(f"Worker: Pulling messages from subscription: {PUBSUB_SUBSCRIPTION_PATH}")
