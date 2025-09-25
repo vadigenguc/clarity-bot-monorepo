@@ -3,3 +3,4 @@ openai
 pydub
 python-dotenv
 supabase
+sentence-transformers
