@@ -4,3 +4,7 @@ pydub
 python-dotenv
 supabase
 sentence-transformers
+pdfminer.six
+python-docx
+openpyxl
+pandas

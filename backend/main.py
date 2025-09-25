@@ -22,10 +22,6 @@ from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
 # Document parsing libraries
-from pdfminer.high_level import extract_text as extract_text_from_pdf
-from docx import Document
-import openpyxl
-import pandas as pd
 
 # Load environment variables from .env file
 load_dotenv()
