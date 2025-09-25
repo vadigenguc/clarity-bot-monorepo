@@ -17,10 +17,6 @@ import json # For serializing job payloads
 # Google Cloud Pub/Sub for job queuing
 from google.cloud import pubsub_v1
 
-# For audio processing (splitting large files)
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
-
 # Document parsing libraries
 
 # Load environment variables from .env file
