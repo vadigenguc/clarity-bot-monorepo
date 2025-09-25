@@ -8,10 +8,6 @@ asyncio
 uuid
 datetime
 polar
-pdfminer.six
-python-docx
-openpyxl
-pandas
 openai
 google-cloud-pubsub
 google-cloud-aiplatform==1.71.1
