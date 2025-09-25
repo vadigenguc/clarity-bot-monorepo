@@ -2,9 +2,8 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
-aiohttp==3.8.5
 certifi
-slack_bolt==1.18.0
+slack_bolt[aiohttp]==1.18.0
 slack_sdk==3.20.0
 supabase
 httpx
