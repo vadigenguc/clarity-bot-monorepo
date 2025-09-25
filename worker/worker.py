@@ -9,6 +9,24 @@ from dotenv import load_dotenv
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
 
+# Document parsing libraries
+from pdfminer.high_level import extract_text as extract_text_from_pdf
+from docx import Document
+import openpyxl
+import pandas as pd
+
+# Vectorization
+from sentence_transformers import SentenceTransformer
+
+# Document parsing libraries
+from pdfminer.high_level import extract_text as extract_text_from_pdf
+from docx import Document
+import openpyxl
+import pandas as pd
+
+# Vectorization
+from sentence_transformers import SentenceTransformer
+
 from supabase import create_client, Client, ClientOptions
 
 # Google Cloud Pub/Sub for job queuing
@@ -94,7 +112,62 @@ async def transcribe_audio_chunk(audio_chunk_io: io.BytesIO, chunk_name: str) ->
         logger.error(f"Error transcribing audio chunk '{chunk_name}': {e}")
         return None
 
-async def process_and_store_content(
+# Load Sentence Transformer model globally
+try:
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    logger.info("Worker: SentenceTransformer model 'all-MiniLM-L6-v2' loaded successfully.")
+except Exception as e:
+    logger.error(f"Worker: Error loading SentenceTransformer model: {e}")
+    embedding_model = None # Handle case where model fails to load
+
+def get_embedding(text: str):
+    if embedding_model:
+        return embedding_model.encode(text).tolist()
+    logger.error("Worker: Embedding model not loaded. Cannot generate embedding.")
+    return None
+
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
+    """Splits text into chunks with optional overlap."""
+    if not text:
+        return []
+    chunks = []
+    words = text.split()
+    i = 0
+    while i < len(words):
+        chunk = " ".join(words[i:i + chunk_size])
+        chunks.append(chunk)
+        i += chunk_size - overlap
+        if i < 0: # Ensure i doesn't go negative if overlap > chunk_size
+            i = 0
+    return chunks
+
+def extract_text_from_file(file_content: bytes, file_type: str) -> str:
+    """Extracts text from various file types."""
+    text = ""
+    try:
+        if file_type == 'pdf':
+            text = extract_text_from_pdf(io.BytesIO(file_content))
+        elif file_type == 'docx':
+            document = Document(io.BytesIO(file_content))
+            text = "\n".join([p.text for p in document.paragraphs])
+        elif file_type in ['xlsx', 'csv']:
+            if file_type == 'xlsx':
+                xls = pd.ExcelFile(io.BytesIO(file_content))
+                for sheet_name in xls.sheet_names:
+                    df = pd.read_excel(xls, sheet_name=sheet_name)
+                    text += df.to_string(index=False) + "\n"
+            elif file_type == 'csv':
+                df = pd.read_csv(io.BytesIO(file_content))
+                text = df.to_string(index=False)
+        elif file_type == 'txt':
+            text = file_content.decode('utf-8')
+        else:
+            logger.warning(f"Worker: Unsupported file type for text extraction: {file_type}")
+    except Exception as e:
+        logger.error(f"Worker: Error extracting text from {file_type} file: {e}")
+    return text
+
+async def process_and_store_embedding(
     workspace_id: str, 
     channel_id: str, 
     source_type: str, 
@@ -102,33 +175,31 @@ async def process_and_store_content(
     content_text: str, 
     rls_supabase_client: Client
 ):
-    """Stores content and its embeddings in Supabase."""
+    """Generates embeddings for content chunks and stores them in Supabase."""
     if not content_text:
-        logger.info(f"No content text to process for {source_type} {source_id} in channel {channel_id}.")
+        logger.info(f"Worker: No content text to process for {source_type} {source_id} in channel {channel_id}.")
         return
 
-    # Placeholder for chunking and embedding logic (similar to main.py)
-    # For a real worker, you'd re-implement or import these functions.
-    # For now, we'll just store the full text as one entry.
-    try:
-        options = ClientOptions(headers={"x-workspace-id": workspace_id, "x-channel-id": channel_id})
-        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
-
-        # In a real scenario, you'd chunk and embed here.
-        # For simplicity, storing the full transcript as one entry for now.
-        await asyncio.to_thread(
-            rls_supabase_client.from_('document_embeddings').insert({
-                'workspace_id': workspace_id,
-                'channel_id': channel_id,
-                'source_type': source_type,
-                'source_id': source_id,
-                'content': content_text,
-                'embedding': [] # Placeholder for actual embedding
-            }).execute
-        )
-        logger.info(f"Content for {source_type} {source_id} in channel {channel_id} stored in document_embeddings.")
-    except Exception as e:
-        logger.error(f"Error storing content for {source_type} {source_id} in channel {channel_id}: {e}")
+    chunks = chunk_text(content_text)
+    for i, chunk in enumerate(chunks):
+        embedding = get_embedding(chunk)
+        if embedding:
+            try:
+                await asyncio.to_thread(
+                    rls_supabase_client.from_('document_embeddings').insert({
+                        'workspace_id': workspace_id,
+                        'channel_id': channel_id,
+                        'source_type': source_type,
+                        'source_id': f"{source_id}_chunk_{i}",
+                        'content': chunk,
+                        'embedding': embedding
+                    }).execute
+                )
+                logger.info(f"Worker: Chunk {i} for {source_type} {source_id} in channel {channel_id} stored in document_embeddings.")
+            except Exception as e:
+                logger.error(f"Worker: Error storing embedding for chunk {i} of {source_type} {source_id} in channel {channel_id}: {e}")
+        else:
+            logger.warning(f"Worker: Could not generate embedding for chunk {i} of {source_type} {source_id} in channel {channel_id}.")
 
 
 async def send_slack_message(channel_id: str, user_id: str, text: str, slack_bot_token: str):
@@ -149,6 +220,81 @@ async def send_slack_message(channel_id: str, user_id: str, text: str, slack_bot
         response.raise_for_status()
         logger.info(f"Slack message sent to {channel_id} for user {user_id}.")
 
+
+async def process_embedding_job(job_payload: dict):
+    """Processes a single embedding job from the queue."""
+    workspace_id = job_payload.get("workspace_id")
+    channel_id = job_payload.get("channel_id")
+    source_type = job_payload.get("source_type")
+    source_id = job_payload.get("source_id")
+    content_text = job_payload.get("content")
+
+    if not all([workspace_id, channel_id, source_type, source_id, content_text]):
+        logger.error(f"Worker: Invalid embedding job payload: {job_payload}")
+        return
+
+    try:
+        options = ClientOptions(headers={"x-workspace-id": workspace_id, "x-channel-id": channel_id})
+        rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
+        await process_and_store_embedding(workspace_id, channel_id, source_type, source_id, content_text, rls_supabase_client)
+        logger.info(f"Worker: Embedding job processed for {source_type} {source_id}.")
+    except Exception as e:
+        logger.error(f"Worker: Error processing embedding job for {source_type} {source_id}: {e}")
+
+async def process_document_processing_job(job_payload: dict):
+    """Processes a single document processing job from the queue."""
+    file_url = job_payload.get("file_url")
+    workspace_id = job_payload.get("workspace_id")
+    channel_id = job_payload.get("channel_id")
+    file_id = job_payload.get("file_id")
+    file_name = job_payload.get("file_name")
+    user_id = job_payload.get("user_id")
+    file_type = job_payload.get("file_type")
+
+    if not all([file_url, workspace_id, channel_id, file_id, file_name, user_id, file_type]):
+        logger.error(f"Worker: Invalid document processing job payload: {job_payload}")
+        return
+
+    slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
+    if not slack_bot_token:
+        logger.error("SLACK_BOT_TOKEN not set in environment.")
+        await send_slack_message(channel_id, user_id, f"❌ Document processing failed for `{file_name}`: Server configuration error.", slack_bot_token)
+        return
+
+    try:
+        logger.info(f"Worker: Downloading document {file_name} from Slack...")
+        file_content = await download_file_from_slack(file_url, slack_bot_token)
+        logger.info(f"Worker: Document {file_name} downloaded. Size: {len(file_content) / (1024*1024):.2f} MB")
+
+        logger.info(f"Worker: Extracting text from document {file_name}...")
+        extracted_text = extract_text_from_file(file_content, file_type)
+
+        if extracted_text:
+            logger.info(f"Worker: Text extracted from {file_name}. Publishing embedding job...")
+            embedding_job_payload = {
+                "workspace_id": workspace_id,
+                "channel_id": channel_id,
+                "source_type": 'file', # Always 'file' for document processing
+                "source_id": file_id,
+                "content": extracted_text
+            }
+            
+            publisher, topic_path = get_pubsub_embedding_publisher_client()
+            if publisher and topic_path:
+                future = publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
+                future.result() # Wait for the publish call to complete
+                logger.info(f"Worker: Published embedding job for document {file_name} to Pub/Sub topic: {topic_path}")
+                await send_slack_message(channel_id, user_id, f"✅ I've processed `{file_name}` and added it to the project knowledge base (embeddings are being generated).", slack_bot_token)
+            else:
+                logger.error("Worker: Pub/Sub embedding topic path not configured. Cannot offload embedding for document.")
+                await send_slack_message(channel_id, user_id, f"❌ Failed to process document `{file_name}`: Server configuration error (Pub/Sub not set up for embeddings).", slack_bot_token)
+        else:
+            logger.warning(f"Worker: No text extracted from {file_name}.")
+            await send_slack_message(channel_id, user_id, f"⚠️ Could not extract text from `{file_name}`. It might be an unsupported format or empty.", slack_bot_token)
+
+    except Exception as e:
+        logger.error(f"Worker: Error processing document job for {file_name}: {e}")
+        await send_slack_message(channel_id, user_id, f"❌ An error occurred during document processing for `{file_name}`: {e}", slack_bot_token)
 
 async def process_transcription_job(job_payload: dict):
     """Processes a single transcription job from the queue."""
@@ -189,22 +335,46 @@ async def process_transcription_job(job_payload: dict):
         full_transcript = " ".join([t for t in transcripts if t])
         
         if full_transcript:
-            logger.info(f"Worker: Full transcript generated for {file_name}. Storing in Supabase...")
-            options = ClientOptions(headers={"x-workspace-id": workspace_id, "x-channel-id": channel_id})
-            rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
-            await process_and_store_content(workspace_id, channel_id, 'transcription', file_id, full_transcript, rls_supabase_client)
-            
+            logger.info(f"Worker: Full transcript generated for {file_name}. Publishing embedding job...")
+            embedding_job_payload = {
+                "workspace_id": workspace_id,
+                "channel_id": channel_id,
+                "source_type": 'transcription',
+                "source_id": file_id,
+                "content": full_transcript
+            }
+            publisher, topic_path = get_pubsub_embedding_publisher_client()
+            if publisher and topic_path:
+                future = publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
+                future.result() # Wait for the publish call to complete
+                logger.info(f"Worker: Published embedding job for transcription of {file_name} to Pub/Sub topic: {topic_path}")
+            else:
+                logger.error("Worker: Pub/Sub embedding topic path not configured. Cannot offload embedding for transcription.")
+
             # Load summarization prompt
             summarization_prompt = load_prompt("summarization_prompt")
             logger.info(f"Worker: Generating summary for {file_name}...")
             summary = await llm_service_manager.summarize_text(full_transcript, summarization_prompt)
 
             if summary:
-                logger.info(f"Worker: Summary generated for {file_name}. Storing in Supabase and sending to Slack...")
-                await process_and_store_content(workspace_id, channel_id, 'summary', file_id, summary, rls_supabase_client)
+                logger.info(f"Worker: Summary generated for {file_name}. Publishing embedding job for summary...")
+                summary_embedding_job_payload = {
+                    "workspace_id": workspace_id,
+                    "channel_id": channel_id,
+                    "source_type": 'summary',
+                    "source_id": file_id,
+                    "content": summary
+                }
+                publisher, topic_path = get_pubsub_embedding_publisher_client()
+                if publisher and topic_path:
+                    future = publisher.publish(topic_path, json.dumps(summary_embedding_job_payload).encode("utf-8"))
+                    future.result() # Wait for the publish call to complete
+                    logger.info(f"Worker: Published embedding job for summary of {file_name} to Pub/Sub topic: {topic_path}")
+                else:
+                    logger.error("Worker: Pub/Sub embedding topic path not configured. Cannot offload embedding for summary.")
                 
                 # Send initial message about transcription completion
-                await send_slack_message(channel_id, user_id, f"✅ Your transcription for `{file_name}` is complete! It has been added to the project knowledge base.", slack_bot_token)
+                await send_slack_message(channel_id, user_id, f"✅ Your transcription for `{file_name}` is complete! It has been added to the project knowledge base (embeddings are being generated).", slack_bot_token)
                 
                 # Send summary as a threaded reply
                 await send_slack_message(channel_id, user_id, f"📝 Here's a summary of `{file_name}`:\n\n{summary}", slack_bot_token)
@@ -221,71 +391,134 @@ async def process_transcription_job(job_payload: dict):
 
 
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
-PUBSUB_SUBSCRIPTION_NAME = "clarity-transcription-jobs-sub" # Name of the Pub/Sub subscription
+PUBSUB_TRANSCRIPTION_SUBSCRIPTION_NAME = "clarity-transcription-jobs-sub" # Name of the Pub/Sub subscription for transcription
+PUBSUB_EMBEDDING_SUBSCRIPTION_NAME = "clarity-embedding-jobs-sub" # Name of the Pub/Sub subscription for embeddings
+PUBSUB_DOCUMENT_PROCESSING_SUBSCRIPTION_NAME = "clarity-document-processing-jobs-sub" # Name of the Pub/Sub subscription for document processing
 
-def get_pubsub_subscriber_client():
-    """Initializes and returns a Pub/Sub subscriber client."""
-    if not GCP_PROJECT_ID:
-        logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub subscriber will not function.")
-        return None
-    return pubsub_v1.SubscriberClient()
+# Lazy initialization for Pub/Sub subscriber clients
+_pubsub_transcription_subscriber = None
+_pubsub_transcription_subscription_path = None
+_pubsub_embedding_subscriber = None
+_pubsub_embedding_subscription_path = None
+_pubsub_document_processing_subscriber = None
+_pubsub_document_processing_subscription_path = None
 
-def get_pubsub_subscription_path(subscriber_client):
-    """Returns the full Pub/Sub subscription path."""
-    if not GCP_PROJECT_ID or not subscriber_client:
-        return None
-    return subscriber_client.subscription_path(GCP_PROJECT_ID, PUBSUB_SUBSCRIPTION_NAME)
+def get_pubsub_transcription_subscriber_client():
+    global _pubsub_transcription_subscriber, _pubsub_transcription_subscription_path
+    if _pubsub_transcription_subscriber is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription subscriber will not function.")
+            return None, None
+        _pubsub_transcription_subscriber = pubsub_v1.SubscriberClient()
+        _pubsub_transcription_subscription_path = _pubsub_transcription_subscriber.subscription_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_SUBSCRIPTION_NAME)
+        logger.info("Pub/Sub transcription subscriber client initialized.")
+    return _pubsub_transcription_subscriber, _pubsub_transcription_subscription_path
+
+def get_pubsub_embedding_subscriber_client():
+    global _pubsub_embedding_subscriber, _pubsub_embedding_subscription_path
+    if _pubsub_embedding_subscriber is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding subscriber will not function.")
+            return None, None
+        _pubsub_embedding_subscriber = pubsub_v1.SubscriberClient()
+        _pubsub_embedding_subscription_path = _pubsub_embedding_subscriber.subscription_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_SUBSCRIPTION_NAME)
+        logger.info("Pub/Sub embedding subscriber client initialized.")
+    return _pubsub_embedding_subscriber, _pubsub_embedding_subscription_path
+
+def get_pubsub_document_processing_subscriber_client():
+    global _pubsub_document_processing_subscriber, _pubsub_document_processing_subscription_path
+    if _pubsub_document_processing_subscriber is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub document processing subscriber will not function.")
+            return None, None
+        _pubsub_document_processing_subscriber = pubsub_v1.SubscriberClient()
+        _pubsub_document_processing_subscription_path = _pubsub_document_processing_subscriber.subscription_path(GCP_PROJECT_ID, PUBSUB_DOCUMENT_PROCESSING_SUBSCRIPTION_NAME)
+        logger.info("Pub/Sub document processing subscriber client initialized.")
+    return _pubsub_document_processing_subscriber, _pubsub_document_processing_subscription_path
 
 async def main_worker_loop():
-    """Main loop for the Cloud Run Job to pull and process messages."""
-    subscriber = get_pubsub_subscriber_client()
-    PUBSUB_SUBSCRIPTION_PATH = get_pubsub_subscription_path(subscriber)
+    """Main loop for the Cloud Run Job to pull and process messages from all subscriptions."""
+    
+    # Initialize all subscribers and their paths
+    transcription_subscriber, transcription_sub_path = get_pubsub_transcription_subscriber_client()
+    embedding_subscriber, embedding_sub_path = get_pubsub_embedding_subscriber_client()
+    document_processing_subscriber, document_processing_sub_path = get_pubsub_document_processing_subscriber_client()
 
-    if not subscriber or not PUBSUB_SUBSCRIPTION_PATH:
-        logger.error("Pub/Sub subscriber or subscription path not configured. Exiting worker.")
+    subscribers_info = []
+    if transcription_subscriber and transcription_sub_path:
+        subscribers_info.append({"subscriber": transcription_subscriber, "path": transcription_sub_path, "type": "transcription"})
+    if embedding_subscriber and embedding_sub_path:
+        subscribers_info.append({"subscriber": embedding_subscriber, "path": embedding_sub_path, "type": "embedding"})
+    if document_processing_subscriber and document_processing_sub_path:
+        subscribers_info.append({"subscriber": document_processing_subscriber, "path": document_processing_sub_path, "type": "document_processing"})
+
+    if not subscribers_info:
+        logger.error("Worker: No Pub/Sub subscribers or subscription paths configured. Exiting worker.")
         return
 
-    logger.info(f"Worker: Pulling messages from subscription: {PUBSUB_SUBSCRIPTION_PATH}")
+    logger.info(f"Worker: Pulling messages from {len(subscribers_info)} subscriptions.")
     
-    try:
-        # Pull messages (blocking call, but Cloud Run Job will run to completion)
-        # For a Cloud Run Job, we typically pull a finite number of messages and then exit.
-        # The Cloud Scheduler will trigger this job periodically.
-        response = subscriber.pull(
-            request={
-                "subscription": PUBSUB_SUBSCRIPTION_PATH,
-                "max_messages": 10, # Process up to 10 messages per job run
-                "return_immediately": True, # Return even if no messages
-            }
-        )
+    all_ack_ids = []
+    all_tasks = []
 
-        if not response.received_messages:
-            logger.info("Worker: No messages to process. Exiting.")
-            return
+    for sub_info in subscribers_info:
+        subscriber = sub_info["subscriber"]
+        sub_path = sub_info["path"]
+        sub_type = sub_info["type"]
 
-        ack_ids = []
-        tasks = []
-        for received_message in response.received_messages:
-            ack_ids.append(received_message.ack_id)
-            try:
-                job_payload = json.loads(received_message.message.data.decode("utf-8"))
-                logger.info(f"Worker: Received job: {job_payload.get('file_name', 'N/A')}")
-                tasks.append(process_transcription_job(job_payload))
-            except json.JSONDecodeError as e:
-                logger.error(f"Worker: Failed to decode Pub/Sub message: {e}. Message: {received_message.message.data}")
-                # Acknowledge malformed messages to remove them from the queue
-                subscriber.acknowledge(request={"subscription": PUBSUB_SUBSCRIPTION_PATH, "ack_ids": [received_message.ack_id]})
+        logger.info(f"Worker: Pulling messages from {sub_type} subscription: {sub_path}")
+        try:
+            response = subscriber.pull(
+                request={
+                    "subscription": sub_path,
+                    "max_messages": 10, # Process up to 10 messages per job run per subscription
+                    "return_immediately": True,
+                }
+            )
+
+            if not response.received_messages:
+                logger.info(f"Worker: No messages to process in {sub_type} subscription.")
+                continue
+
+            for received_message in response.received_messages:
+                all_ack_ids.append({"ack_id": received_message.ack_id, "subscriber": subscriber, "sub_path": sub_path})
+                try:
+                    job_payload = json.loads(received_message.message.data.decode("utf-8"))
+                    logger.info(f"Worker: Received {sub_type} job: {job_payload.get('file_name', job_payload.get('source_id', 'N/A'))}")
+                    
+                    if sub_type == "transcription":
+                        all_tasks.append(process_transcription_job(job_payload))
+                    elif sub_type == "embedding":
+                        all_tasks.append(process_embedding_job(job_payload))
+                    elif sub_type == "document_processing":
+                        all_tasks.append(process_document_processing_job(job_payload))
+                    else:
+                        logger.warning(f"Worker: Unhandled job type '{sub_type}' from subscription {sub_path}. Acknowledging message.")
+                        # Acknowledge unhandled messages to remove them from the queue
+                        subscriber.acknowledge(request={"subscription": sub_path, "ack_ids": [received_message.ack_id]})
+
+                except json.JSONDecodeError as e:
+                    logger.error(f"Worker: Failed to decode Pub/Sub message from {sub_type} subscription: {e}. Message: {received_message.message.data}")
+                    # Acknowledge malformed messages
+                    subscriber.acknowledge(request={"subscription": sub_path, "ack_ids": [received_message.ack_id]})
                 
-        if tasks:
-            await asyncio.gather(*tasks) # Process all valid jobs concurrently
+        except Exception as e:
+            logger.error(f"Worker: An error occurred during Pub/Sub message pulling from {sub_type} subscription {sub_path}: {e}")
 
-        if ack_ids:
-            # Acknowledge all processed messages
-            subscriber.acknowledge(request={"subscription": PUBSUB_SUBSCRIPTION_PATH, "ack_ids": ack_ids})
-            logger.info(f"Worker: Acknowledged {len(ack_ids)} messages.")
+    if all_tasks:
+        await asyncio.gather(*all_tasks) # Process all valid jobs concurrently
 
-    except Exception as e:
-        logger.error(f"Worker: An error occurred during Pub/Sub message pulling or processing: {e}")
+    # Acknowledge all processed messages for each subscriber
+    for sub_info in subscribers_info:
+        subscriber = sub_info["subscriber"]
+        sub_path = sub_info["path"]
+        ack_ids_for_sub = [item["ack_id"] for item in all_ack_ids if item["subscriber"] == subscriber]
+        if ack_ids_for_sub:
+            try:
+                subscriber.acknowledge(request={"subscription": sub_path, "ack_ids": ack_ids_for_sub})
+                logger.info(f"Worker: Acknowledged {len(ack_ids_for_sub)} messages for subscription {sub_path}.")
+            except Exception as e:
+                logger.error(f"Worker: Error acknowledging messages for subscription {sub_path}: {e}")
 
 # --- Main execution for Google Cloud Run Job ---
 if __name__ == "__main__":
