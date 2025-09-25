@@ -2,11 +2,8 @@
   "version": 2,
   "builds": [
     {
-      "src": "Dockerfile",
-      "use": "@vercel/docker",
-      "config": {
-        "image": "gcr.io/clarity-b0t/clarity-backend:latest"
-      }
+      "src": "main.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
