@@ -14,7 +14,6 @@ openpyxl
 pandas
 sentence-transformers
 openai
-pydub
 google-cloud-pubsub
 google-cloud-aiplatform==1.71.1
 vertexai==1.71.1
