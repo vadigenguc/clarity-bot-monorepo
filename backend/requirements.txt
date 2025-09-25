@@ -5,7 +5,6 @@ slack_bolt
 supabase
 httpx
 asyncio
-uuid
 datetime
 openai
 google-cloud-pubsub
