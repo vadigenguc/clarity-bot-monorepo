@@ -1,11 +1,12 @@
 fastapi
 pydantic
 python-dotenv
-slack_bolt
+aiohttp==3.8.5
+slack_bolt==1.18.0
+slack_sdk
 supabase
 httpx
 asyncio
-aiohttp
 datetime
 openai
 google-cloud-pubsub
