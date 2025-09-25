@@ -65,8 +65,8 @@ def get_pubsub_embedding_publisher_client():
     return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
 
 # Import LLM Service Manager and Prompt Loader
-from backend.services.llm_service import llm_service_manager
-from backend.utils.prompt_loader import load_prompt
+from .services.llm_service import llm_service_manager
+from .utils.prompt_loader import load_prompt
 
 # Define max file size for direct transcription (25MB for Whisper API)
 MAX_DIRECT_TRANSCRIPTION_SIZE_MB = 20
