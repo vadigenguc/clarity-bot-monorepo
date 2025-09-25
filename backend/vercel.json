@@ -2,10 +2,11 @@
   "version": 2,
   "builds": [
     {
-      "src": "Dockerfile",
-      "use": "@vercel/docker",
+      "src": "main.py",
+      "use": "@vercel/python",
       "config": {
-        "image": "gcr.io/<YOUR_GCP_PROJECT_ID>/clarity-backend:latest"
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.10"
       }
     }
   ],
