@@ -337,9 +337,16 @@ async def check_authorization(context, body, logger, client):
 
     event_type = body.get("event", {}).get("type")
 
+    async def send_auth_message(channel, text):
+        """Helper to send messages and log errors."""
+        try:
+            await client.chat_postMessage(channel=channel, text=text)
+        except Exception as e:
+            logger.error(f"Failed to send auth message to channel {channel}: {e}")
+
     if not all([channel_id, user_id, team_id]):
         logger.warning("Missing channel_id, user_id, or team_id in event context.")
-        await client.chat_postMessage(channel=user_id, text="Error: Missing context information. Please try again or contact support.")
+        await send_auth_message(user_id, "Error: Missing context information. Please try again or contact support.")
         return False
 
     try:
@@ -353,7 +360,7 @@ async def check_authorization(context, body, logger, client):
 
         # 1. Check if the channel is enabled
         if not await is_channel_enabled(rls_supabase_client, team_id, channel_id, logger):
-            await client.chat_postMessage(channel=channel_id, text="This channel is not enabled for bot interaction. Please contact your workspace admin.")
+            await send_auth_message(channel_id, "This channel is not enabled for bot interaction. Please contact your workspace admin.")
             return False
 
         # 2. Check if the initiating user is authorized
@@ -364,25 +371,25 @@ async def check_authorization(context, body, logger, client):
         
         if requires_user_auth and not user_is_authorized:
             logger.info(f"Ignoring interactive event from unauthorized user {user_id} in channel {channel_id}.")
-            await client.chat_postMessage(channel=channel_id, text="You are not authorized to interact with this bot. Please contact your workspace admin.")
+            await send_auth_message(channel_id, "You are not authorized to interact with this bot. Please contact your workspace admin.")
             return False
         
         # 4. For DMs, the single user must be authorized
         if channel_id.startswith('D') and not user_is_authorized:
             logger.info(f"Ignoring DM event from unauthorized user {user_id}.")
-            await client.chat_postMessage(channel=user_id, text="You are not authorized to interact with this bot.")
+            await send_auth_message(user_id, "You are not authorized to interact with this bot.")
             return False
 
         # 5. For Group DMs, all members must be authorized
         if not await are_all_group_members_authorized(rls_supabase_client, team_id, channel_id, logger):
-            await client.chat_postMessage(channel=channel_id, text="This group chat contains unauthorized members. The bot can only interact in group DMs where all members are authorized.")
+            await send_auth_message(channel_id, "This group chat contains unauthorized members. The bot can only interact in group DMs where all members are authorized.")
             return False
         
         return True # All checks passed
 
     except Exception as e:
         logger.error(f"An internal error occurred during authorization: {e}")
-        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred during authorization: {e}")
+        await send_auth_message(user_id, f"An internal error occurred during authorization: {e}")
         return False
 
 # --- Slack Event Listeners ---
