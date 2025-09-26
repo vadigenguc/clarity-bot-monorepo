@@ -76,7 +76,7 @@ MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES = MAX_DIRECT_TRANSCRIPTION_SIZE_MB * 1024 * 
 slack_app = AsyncApp(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET"),
-    process_before_response=True # Acknowledge events immediately
+    # process_before_response=True # Acknowledge events immediately
 )
 slack_handler = AsyncSlackRequestHandler(slack_app)
 
