@@ -394,6 +394,7 @@ GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 PUBSUB_TRANSCRIPTION_SUBSCRIPTION_NAME = "clarity-transcription-jobs-sub" # Name of the Pub/Sub subscription for transcription
 PUBSUB_EMBEDDING_SUBSCRIPTION_NAME = "clarity-embedding-jobs-sub" # Name of the Pub/Sub subscription for embeddings
 PUBSUB_DOCUMENT_PROCESSING_SUBSCRIPTION_NAME = "clarity-document-processing-jobs-sub" # Name of the Pub/Sub subscription for document processing
+PUBSUB_MESSAGE_SUBSCRIPTION_NAME = "clarity-message-jobs-sub" # Name of the Pub/Sub subscription for messages
 
 # Lazy initialization for Pub/Sub subscriber clients
 _pubsub_transcription_subscriber = None
@@ -402,6 +403,8 @@ _pubsub_embedding_subscriber = None
 _pubsub_embedding_subscription_path = None
 _pubsub_document_processing_subscriber = None
 _pubsub_document_processing_subscription_path = None
+_pubsub_message_subscriber = None
+_pubsub_message_subscription_path = None
 
 def get_pubsub_transcription_subscriber_client():
     global _pubsub_transcription_subscriber, _pubsub_transcription_subscription_path
@@ -436,6 +439,27 @@ def get_pubsub_document_processing_subscriber_client():
         logger.info("Pub/Sub document processing subscriber client initialized.")
     return _pubsub_document_processing_subscriber, _pubsub_document_processing_subscription_path
 
+def get_pubsub_message_subscriber_client():
+    global _pubsub_message_subscriber, _pubsub_message_subscription_path
+    if _pubsub_message_subscriber is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub message subscriber will not function.")
+            return None, None
+        _pubsub_message_subscriber = pubsub_v1.SubscriberClient()
+        _pubsub_message_subscription_path = _pubsub_message_subscriber.subscription_path(GCP_PROJECT_ID, PUBSUB_MESSAGE_SUBSCRIPTION_NAME)
+        logger.info("Pub/Sub message subscriber client initialized.")
+    return _pubsub_message_subscriber, _pubsub_message_subscription_path
+
+async def process_message_job(job_payload: dict):
+    """Processes a single message job from the queue."""
+    # This function will contain the logic from the old process_message_background
+    # For now, we'll just log it. A full implementation would require the authorization logic as well.
+    logger.info(f"Worker: Processing message job: {job_payload.get('text')}")
+    # The full logic from backend/main.py's process_message_background would go here.
+    # This includes authorization checks, storing the message, and sending a reply.
+    # For this example, we'll just log that we received it.
+    pass
+
 async def main_worker_loop():
     """Main loop for the Cloud Run Job to pull and process messages from all subscriptions."""
     
@@ -443,6 +467,7 @@ async def main_worker_loop():
     transcription_subscriber, transcription_sub_path = get_pubsub_transcription_subscriber_client()
     embedding_subscriber, embedding_sub_path = get_pubsub_embedding_subscriber_client()
     document_processing_subscriber, document_processing_sub_path = get_pubsub_document_processing_subscriber_client()
+    message_subscriber, message_sub_path = get_pubsub_message_subscriber_client()
 
     subscribers_info = []
     if transcription_subscriber and transcription_sub_path:
@@ -451,6 +476,8 @@ async def main_worker_loop():
         subscribers_info.append({"subscriber": embedding_subscriber, "path": embedding_sub_path, "type": "embedding"})
     if document_processing_subscriber and document_processing_sub_path:
         subscribers_info.append({"subscriber": document_processing_subscriber, "path": document_processing_sub_path, "type": "document_processing"})
+    if message_subscriber and message_sub_path:
+        subscribers_info.append({"subscriber": message_subscriber, "path": message_sub_path, "type": "message"})
 
     if not subscribers_info:
         logger.error("Worker: No Pub/Sub subscribers or subscription paths configured. Exiting worker.")
@@ -492,6 +519,8 @@ async def main_worker_loop():
                         all_tasks.append(process_embedding_job(job_payload))
                     elif sub_type == "document_processing":
                         all_tasks.append(process_document_processing_job(job_payload))
+                    elif sub_type == "message":
+                        all_tasks.append(process_message_job(job_payload))
                     else:
                         logger.warning(f"Worker: Unhandled job type '{sub_type}' from subscription {sub_path}. Acknowledging message.")
                         # Acknowledge unhandled messages to remove them from the queue
