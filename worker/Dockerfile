@@ -8,11 +8,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 && rm -rf /var/lib/apt/lists/*
 
 # Install any needed packages specified in requirements.txt
-COPY requirements.txt .
+COPY worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the current directory contents into the container at /app
-COPY worker.py .
+# Copy the worker script and the shared backend module into the container
+COPY worker/worker.py .
+COPY backend/ ./backend/
 
-# Command to run the application
-CMD ["python", "worker.py"]
+# Command to run the application using uvicorn
+CMD ["uvicorn", "worker:app", "--host", "0.0.0.0", "--port", "8080"]
