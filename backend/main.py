@@ -45,23 +45,37 @@ _pubsub_embedding_topic_path = None
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
     if _pubsub_transcription_publisher is None:
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set. Pub/Sub will not function.")
+            return None, None
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription publisher will not function.")
             return None, None
-        _pubsub_transcription_publisher = pubsub_v1.PublisherClient()
-        _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
-        logger.info("Pub/Sub transcription publisher client initialized.")
+        try:
+            _pubsub_transcription_publisher = pubsub_v1.PublisherClient()
+            _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
+            logger.info("Pub/Sub transcription publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub transcription publisher: {e}")
+            return None, None
     return _pubsub_transcription_publisher, _pubsub_transcription_topic_path
 
 def get_pubsub_embedding_publisher_client():
     global _pubsub_embedding_publisher, _pubsub_embedding_topic_path
     if _pubsub_embedding_publisher is None:
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set. Pub/Sub will not function.")
+            return None, None
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding publisher will not function.")
             return None, None
-        _pubsub_embedding_publisher = pubsub_v1.PublisherClient()
-        _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
-        logger.info("Pub/Sub embedding publisher client initialized.")
+        try:
+            _pubsub_embedding_publisher = pubsub_v1.PublisherClient()
+            _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
+            logger.info("Pub/Sub embedding publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub embedding publisher: {e}")
+            return None, None
     return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
 
 # Import LLM Service Manager and Prompt Loader
@@ -372,9 +386,9 @@ async def check_authorization(context, body, logger, say):
         return False
 
 # --- Slack Event Listeners ---
-@slack_app.message()
-async def handle_message(message, say, logger, context):
-    logger.info(f"Message event received: {message}")
+async def process_message_background(message, say, logger, context):
+    """Processes a message event in the background."""
+    logger.info(f"Background processing message event: {message}")
     # Call authorization check
     is_authorized = await check_authorization(context, message, logger, say)
     if not is_authorized:
@@ -419,14 +433,22 @@ async def handle_message(message, say, logger, context):
         # Placeholder for future conversational AI
         await say(f"Message received and processed: '{message_text}'")
 
+@slack_app.message()
+async def handle_message(message, say, logger, context):
+    """
+    This handler receives all message events.
+    It immediately delegates processing to a background task to avoid Slack retries.
+    """
+    asyncio.create_task(process_message_background(message, say, logger, context))
 
-@slack_app.event("file_shared")
-async def handle_file_shared(event, say, logger, context):
-    logger.info(f"File shared event received: {event}")
+
+async def process_file_shared_background(event, say, logger, context):
+    """Processes a file_shared event in the background."""
+    logger.info(f"Background processing file shared event: {event}")
     # Call authorization check
     is_authorized = await check_authorization(context, event, logger, say)
     if not is_authorized:
-        return BoltResponse(status=200) # Return a BoltResponse even for missing context
+        return
 
     rls_supabase = context["rls_supabase"]
     team_id = event.get('team_id')
@@ -436,7 +458,7 @@ async def handle_file_shared(event, say, logger, context):
 
     if not file_id or not channel_id or not team_id or not user_id:
         logger.error("Missing file_id, channel_id, team_id, or user_id in file_shared event.")
-        return BoltResponse(status=200)
+        return
 
     # Check if the file was shared with a message containing bot mention and "ingest"
     # This requires fetching the message associated with the file_shared event.
@@ -460,13 +482,13 @@ async def handle_file_shared(event, say, logger, context):
         if not bot_user_id:
             logger.error("Could not retrieve bot user ID.")
             await say(f"An internal error occurred. Could not retrieve bot ID.")
-            return BoltResponse(status=200)
+            return
 
         bot_mention_pattern = f"<@{bot_user_id}>"
         
         if not message_text_with_file or bot_mention_pattern not in message_text_with_file or "ingest" not in message_text_with_file:
             logger.info(f"Ignoring file {file_id} as bot was not explicitly instructed to ingest.")
-            return BoltResponse(status=200) # Not explicitly instructed, so ignore
+            return # Not explicitly instructed, so ignore
 
         # Proceed with ingestion if explicitly instructed
         # Store raw file metadata
@@ -571,6 +593,14 @@ async def handle_file_shared(event, say, logger, context):
     except Exception as e:
         logger.error(f"Error handling file_shared event or storing file metadata: {e}")
         await say(f"An error occurred while processing your file: {e}")
+
+@slack_app.event("file_shared")
+async def handle_file_shared(event, say, logger, context):
+    """
+    This handler receives all file_shared events.
+    It immediately delegates processing to a background task to avoid Slack retries.
+    """
+    asyncio.create_task(process_file_shared_background(event, say, logger, context))
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     """Transcribes audio content using OpenAI Whisper via LLMServiceManager."""
