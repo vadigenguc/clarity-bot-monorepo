@@ -393,11 +393,11 @@ async def check_authorization(context, body, logger, client):
         return False
 
 # --- Slack Event Listeners ---
-async def process_message_background(message, client, logger, context):
+async def process_message_background(message, context):
     """Processes a message event in the background."""
     logger.info(f"Background processing message event: {message}")
     # Call authorization check
-    is_authorized = await check_authorization(context, message, logger, client)
+    is_authorized = await check_authorization(context, message, logger, slack_app.client)
     if not is_authorized:
         return
 
@@ -429,7 +429,7 @@ async def process_message_background(message, client, logger, context):
 
     # Check for a greeting and respond with a helpful message
     if message_text and message_text.lower().strip() in ["hello", "hi", "hey"]:
-        await client.chat_postMessage(
+        await slack_app.client.chat_postMessage(
             channel=channel_id,
             text="Hello! I'm the Slack Project Manager bot. I can help you with things like:\n"
                  "*   Answering questions about the project status.\n"
@@ -439,22 +439,22 @@ async def process_message_background(message, client, logger, context):
         )
     else:
         # Placeholder for future conversational AI
-        await client.chat_postMessage(channel=channel_id, text=f"Message received and processed: '{message_text}'")
+        await slack_app.client.chat_postMessage(channel=channel_id, text=f"Message received and processed: '{message_text}'")
 
 @slack_app.message()
-async def handle_message(message, client, logger, context):
+async def handle_message(message, context):
     """
     This handler receives all message events.
     It immediately delegates processing to a background task to avoid Slack retries.
     """
-    asyncio.create_task(process_message_background(message, client, logger, context))
+    asyncio.create_task(process_message_background(message, context))
 
 
-async def process_file_shared_background(event, client, logger, context):
+async def process_file_shared_background(event, context):
     """Processes a file_shared event in the background."""
     logger.info(f"Background processing file shared event: {event}")
     # Call authorization check
-    is_authorized = await check_authorization(context, event, logger, client)
+    is_authorized = await check_authorization(context, event, logger, slack_app.client)
     if not is_authorized:
         return
 
@@ -603,12 +603,12 @@ async def process_file_shared_background(event, client, logger, context):
         await client.chat_postMessage(channel=channel_id, text=f"An error occurred while processing your file: {e}")
 
 @slack_app.event("file_shared")
-async def handle_file_shared(event, client, logger, context):
+async def handle_file_shared(event, context):
     """
     This handler receives all file_shared events.
     It immediately delegates processing to a background task to avoid Slack retries.
     """
-    asyncio.create_task(process_file_shared_background(event, client, logger, context))
+    asyncio.create_task(process_file_shared_background(event, context))
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     """Transcribes audio content using OpenAI Whisper via LLMServiceManager."""
