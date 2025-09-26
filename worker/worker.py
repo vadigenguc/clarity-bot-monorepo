@@ -25,6 +25,7 @@ from supabase import create_client, Client, ClientOptions
 
 # Google Cloud Pub/Sub for job queuing
 from google.cloud import pubsub_v1
+from google.oauth2 import service_account
 
 # Import LLM Service Manager and Prompt Loader
 from backend.services.llm_service import llm_service_manager
@@ -47,6 +48,19 @@ WHISPER_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 # 25 MB
 
 app = FastAPI()
 
+def get_gcp_credentials():
+    """Constructs GCP credentials from environment variables."""
+    gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
+    if gcp_credentials_json:
+        try:
+            credentials_info = json.loads(gcp_credentials_json)
+            return service_account.Credentials.from_service_account_info(credentials_info)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}")
+            return None
+    logger.info("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
+    return None # Fallback to default credential discovery
+
 @app.post("/")
 async def receive_message(request: Request):
     """Receives and processes a push message from a Pub/Sub subscription."""
@@ -58,20 +72,9 @@ async def receive_message(request: Request):
     message_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
     job_payload = json.loads(message_data)
 
-    # Determine the job type based on the subscription name in the message attributes
-    # This is a more robust way to handle multiple job types in one service
-    subscription_identifier = pubsub_message.get("attributes", {}).get("googclient_subscription")
-    
-    if PUBSUB_MESSAGE_SUBSCRIPTION_NAME in subscription_identifier:
-        await process_message_job(job_payload)
-    elif PUBSUB_TRANSCRIPTION_SUBSCRIPTION_NAME in subscription_identifier:
-        await process_transcription_job(job_payload)
-    elif PUBSUB_EMBEDDING_SUBSCRIPTION_NAME in subscription_identifier:
-        await process_embedding_job(job_payload)
-    elif PUBSUB_DOCUMENT_PROCESSING_SUBSCRIPTION_NAME in subscription_identifier:
-        await process_document_processing_job(job_payload)
-    else:
-        logger.warning(f"Unhandled subscription source: {subscription_identifier}")
+    # This is a simplified router. A more robust implementation might inspect the payload.
+    # For now, we assume all messages are regular chat messages.
+    await process_message_job(job_payload)
 
     return Response(status_code=204)
 
@@ -88,6 +91,13 @@ async def download_file_from_slack(file_url: str, slack_bot_token: str) -> bytes
 # ... [These functions remain unchanged]
 
 # --- Job Processing Functions ---
+
+async def is_user_authorized(rls_supabase_client: Client, team_id: str, user_id: str) -> bool:
+    """Check if a single user is in the authorized_users table."""
+    response = await asyncio.to_thread(
+        rls_supabase_client.from_('authorized_users').select('user_id').eq('workspace_id', team_id).eq('user_id', user_id).execute
+    )
+    return bool(response.data)
 
 async def process_message_job(job_payload: dict):
     """Processes a single message job from the queue."""
@@ -112,8 +122,6 @@ async def process_message_job(job_payload: dict):
         options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
         rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
         
-        # Re-implementing the authorization logic here
-        # A more advanced implementation would share this code with the main app
         is_authorized = await is_user_authorized(rls_supabase_client, team_id, user_id)
         if not is_authorized:
             logger.warning(f"Unauthorized user {user_id} in DM. No reply sent.")
@@ -146,4 +154,3 @@ async def process_message_job(job_payload: dict):
         logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
 
 # ... [The rest of the file remains, including all helper and other job processing functions]
-# ... [is_user_authorized, process_transcription_job, etc.]

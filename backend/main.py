@@ -16,6 +16,7 @@ import json # For serializing job payloads
 
 # Google Cloud Pub/Sub for job queuing
 from google.cloud import pubsub_v1
+from google.oauth2 import service_account
 
 # Document parsing libraries
 
@@ -45,6 +46,19 @@ _pubsub_transcription_topic_path = None
 _pubsub_embedding_topic_path = None
 _pubsub_message_topic_path = None
 
+def get_gcp_credentials():
+    """Constructs GCP credentials from environment variables."""
+    gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
+    if gcp_credentials_json:
+        try:
+            credentials_info = json.loads(gcp_credentials_json)
+            return service_account.Credentials.from_service_account_info(credentials_info)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}")
+            return None
+    logger.info("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
+    return None # Fallback to default credential discovery
+
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
     if _pubsub_transcription_publisher is None:
@@ -52,7 +66,8 @@ def get_pubsub_transcription_publisher_client():
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription publisher will not function.")
             return None, None
         try:
-            _pubsub_transcription_publisher = pubsub_v1.PublisherClient()
+            credentials = get_gcp_credentials()
+            _pubsub_transcription_publisher = pubsub_v1.PublisherClient(credentials=credentials)
             _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
             logger.info("Pub/Sub transcription publisher client initialized.")
         except Exception as e:
@@ -67,7 +82,8 @@ def get_pubsub_embedding_publisher_client():
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding publisher will not function.")
             return None, None
         try:
-            _pubsub_embedding_publisher = pubsub_v1.PublisherClient()
+            credentials = get_gcp_credentials()
+            _pubsub_embedding_publisher = pubsub_v1.PublisherClient(credentials=credentials)
             _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
             logger.info("Pub/Sub embedding publisher client initialized.")
         except Exception as e:
@@ -82,7 +98,8 @@ def get_pubsub_message_publisher_client():
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub message publisher will not function.")
             return None, None
         try:
-            _pubsub_message_publisher = pubsub_v1.PublisherClient()
+            credentials = get_gcp_credentials()
+            _pubsub_message_publisher = pubsub_v1.PublisherClient(credentials=credentials)
             _pubsub_message_topic_path = _pubsub_message_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_MESSAGE_TOPIC_NAME)
             logger.info("Pub/Sub message publisher client initialized.")
         except Exception as e:
@@ -126,8 +143,6 @@ async def handle_message(message):
     publisher, topic_path = get_pubsub_message_publisher_client()
     if publisher and topic_path:
         try:
-            # The message object from slack_bolt is not directly JSON serializable
-            # We'll convert it to a dict before publishing
             message_payload = {
                 "team_id": message.get("team"),
                 "channel_id": message.get("channel"),
@@ -136,10 +151,10 @@ async def handle_message(message):
                 "text": message.get("text"),
                 "event_ts": message.get("event_ts"),
                 "channel_type": message.get("channel_type"),
-                "raw_message": message # Include the raw message for the worker
+                "raw_message": message
             }
             future = publisher.publish(topic_path, json.dumps(message_payload).encode("utf-8"))
-            future.result() # Wait for the publish call to complete
+            future.result()
             logger.info(f"Published message event for {message.get('ts')} to Pub/Sub topic: {topic_path}")
         except Exception as e:
             logger.error(f"Error publishing message event to Pub/Sub: {e}")
