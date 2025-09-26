@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, Response
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
 from slack_bolt.async_app import AsyncApp
@@ -82,9 +82,6 @@ slack_handler = AsyncSlackRequestHandler(slack_app)
 
 app = FastAPI()
 
-# Pydantic model for waitlist request
-class WaitlistRequest(BaseModel):
-    email: EmailStr
 
 # @app.post("/webhooks/polar-license")
 # async def polar_license_webhook(request: Request):
