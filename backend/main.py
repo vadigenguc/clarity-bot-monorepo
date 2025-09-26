@@ -323,7 +323,7 @@ async def are_all_group_members_authorized(rls_supabase_client: Client, team_id:
         logger.error(f"Error checking group members' authorization in channel {channel_id}: {e}")
         return False
 
-async def check_authorization(context, body, logger, say):
+async def check_authorization(context, body, logger, client):
     """Main authorization function to orchestrate all checks."""
     channel_id = context.get("channel_id")
     user_id = context.get("user_id")
@@ -339,7 +339,7 @@ async def check_authorization(context, body, logger, say):
 
     if not all([channel_id, user_id, team_id]):
         logger.warning("Missing channel_id, user_id, or team_id in event context.")
-        await say("Error: Missing context information. Please try again or contact support.")
+        await client.chat_postMessage(channel=user_id, text="Error: Missing context information. Please try again or contact support.")
         return False
 
     try:
@@ -353,7 +353,7 @@ async def check_authorization(context, body, logger, say):
 
         # 1. Check if the channel is enabled
         if not await is_channel_enabled(rls_supabase_client, team_id, channel_id, logger):
-            await say("This channel is not enabled for bot interaction. Please contact your workspace admin.")
+            await client.chat_postMessage(channel=channel_id, text="This channel is not enabled for bot interaction. Please contact your workspace admin.")
             return False
 
         # 2. Check if the initiating user is authorized
@@ -364,33 +364,33 @@ async def check_authorization(context, body, logger, say):
         
         if requires_user_auth and not user_is_authorized:
             logger.info(f"Ignoring interactive event from unauthorized user {user_id} in channel {channel_id}.")
-            await say("You are not authorized to interact with this bot. Please contact your workspace admin.")
+            await client.chat_postMessage(channel=channel_id, text="You are not authorized to interact with this bot. Please contact your workspace admin.")
             return False
         
         # 4. For DMs, the single user must be authorized
         if channel_id.startswith('D') and not user_is_authorized:
             logger.info(f"Ignoring DM event from unauthorized user {user_id}.")
-            await say("You are not authorized to interact with this bot.")
+            await client.chat_postMessage(channel=user_id, text="You are not authorized to interact with this bot.")
             return False
 
         # 5. For Group DMs, all members must be authorized
         if not await are_all_group_members_authorized(rls_supabase_client, team_id, channel_id, logger):
-            await say("This group chat contains unauthorized members. The bot can only interact in group DMs where all members are authorized.")
+            await client.chat_postMessage(channel=channel_id, text="This group chat contains unauthorized members. The bot can only interact in group DMs where all members are authorized.")
             return False
         
         return True # All checks passed
 
     except Exception as e:
         logger.error(f"An internal error occurred during authorization: {e}")
-        await say(f"An internal error occurred during authorization: {e}")
+        await client.chat_postMessage(channel=user_id, text=f"An internal error occurred during authorization: {e}")
         return False
 
 # --- Slack Event Listeners ---
-async def process_message_background(message, say, logger, context):
+async def process_message_background(message, client, logger, context):
     """Processes a message event in the background."""
     logger.info(f"Background processing message event: {message}")
     # Call authorization check
-    is_authorized = await check_authorization(context, message, logger, say)
+    is_authorized = await check_authorization(context, message, logger, client)
     if not is_authorized:
         return
 
@@ -422,31 +422,32 @@ async def process_message_background(message, say, logger, context):
 
     # Check for a greeting and respond with a helpful message
     if message_text and message_text.lower().strip() in ["hello", "hi", "hey"]:
-        await say(
-            "Hello! I'm the Slack Project Manager bot. I can help you with things like:\n"
-            "*   Answering questions about the project status.\n"
-            "*   Finding technical details from our documents.\n"
-            "*   Creating Jira tickets from conversations.\n\n"
-            "How can I help you today?"
+        await client.chat_postMessage(
+            channel=channel_id,
+            text="Hello! I'm the Slack Project Manager bot. I can help you with things like:\n"
+                 "*   Answering questions about the project status.\n"
+                 "*   Finding technical details from our documents.\n"
+                 "*   Creating Jira tickets from conversations.\n\n"
+                 "How can I help you today?"
         )
     else:
         # Placeholder for future conversational AI
-        await say(f"Message received and processed: '{message_text}'")
+        await client.chat_postMessage(channel=channel_id, text=f"Message received and processed: '{message_text}'")
 
 @slack_app.message()
-async def handle_message(message, say, logger, context):
+async def handle_message(message, client, logger, context):
     """
     This handler receives all message events.
     It immediately delegates processing to a background task to avoid Slack retries.
     """
-    asyncio.create_task(process_message_background(message, say, logger, context))
+    asyncio.create_task(process_message_background(message, client, logger, context))
 
 
-async def process_file_shared_background(event, say, logger, context):
+async def process_file_shared_background(event, client, logger, context):
     """Processes a file_shared event in the background."""
     logger.info(f"Background processing file shared event: {event}")
     # Call authorization check
-    is_authorized = await check_authorization(context, event, logger, say)
+    is_authorized = await check_authorization(context, event, logger, client)
     if not is_authorized:
         return
 
@@ -481,7 +482,7 @@ async def process_file_shared_background(event, say, logger, context):
         bot_user_id = slack_app.client.auth_test().get("user_id")
         if not bot_user_id:
             logger.error("Could not retrieve bot user ID.")
-            await say(f"An internal error occurred. Could not retrieve bot ID.")
+            await client.chat_postMessage(channel=channel_id, text=f"An internal error occurred. Could not retrieve bot ID.")
             return
 
         bot_mention_pattern = f"<@{bot_user_id}>"
@@ -551,56 +552,56 @@ async def process_file_shared_background(event, say, logger, context):
                             future = publisher.publish(topic_path, json.dumps(job_payload).encode("utf-8"))
                             future.result() # Wait for the publish call to complete
                             logger.info(f"Large file ({file_size / (1024*1024):.2f} MB) detected. Pushed transcription job to Pub/Sub topic: {topic_path}")
-                            await say(f"⏳ Your large audio/video file `{file_name}` is being processed in the background. I'll notify you when the transcription is complete!")
+                            await client.chat_postMessage(channel=channel_id, text=f"⏳ Your large audio/video file `{file_name}` is being processed in the background. I'll notify you when the transcription is complete!")
                         else:
                             logger.error("Pub/Sub transcription topic path not configured. Cannot queue large file for transcription.")
-                            await say(f"❌ Failed to process large file `{file_name}`: Server configuration error (Pub/Sub not set up).")
+                            await client.chat_postMessage(channel=channel_id, text=f"❌ Failed to process large file `{file_name}`: Server configuration error (Pub/Sub not set up).")
                     else:
                         # For small files, download and transcribe directly
                         headers = {'Authorization': f'Bearer {slack_app.token}'}
-                        async with httpx.AsyncClient() as client:
-                            response = await client.get(file_url, headers=headers)
+                        async with httpx.AsyncClient() as http_client:
+                            response = await http_client.get(file_url, headers=headers)
                             response.raise_for_status()
                             file_content_bytes = await response.aread()
 
                         transcribed_text = await transcribe_audio(file_content_bytes, file_name)
                         if transcribed_text:
                             await process_and_store_content(team_id, channel_id, 'transcription', file_id, transcribed_text, rls_supabase)
-                            await say(f"✅ I've transcribed `{file_name}` and added it to the project knowledge base.")
+                            await client.chat_postMessage(channel=channel_id, text=f"✅ I've transcribed `{file_name}` and added it to the project knowledge base.")
                         else:
-                            await say(f"❌ Failed to transcribe `{file_name}`.")
+                            await client.chat_postMessage(channel=channel_id, text=f"❌ Failed to transcribe `{file_name}`.")
                 else:
                     # Process as a regular document
                     headers = {'Authorization': f'Bearer {slack_app.token}'}
-                    async with httpx.AsyncClient() as client:
-                        response = await client.get(file_url, headers=headers)
+                    async with httpx.AsyncClient() as http_client:
+                        response = await http_client.get(file_url, headers=headers)
                         response.raise_for_status()
                         file_content_bytes = await response.aread()
 
                     extracted_text = extract_text_from_file(file_content_bytes, file_type)
                     if extracted_text:
                         await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
-                        await say(f"✅ I've processed `{file_name}` and added it to the project knowledge base.")
+                        await client.chat_postMessage(channel=channel_id, text=f"✅ I've processed `{file_name}` and added it to the project knowledge base.")
                     else:
-                        await say(f"⚠️ Could not extract text from `{file_name}`. It might be an unsupported format or empty.")
+                        await client.chat_postMessage(channel=channel_id, text=f"⚠️ Could not extract text from `{file_name}`. It might be an unsupported format or empty.")
             else:
                 logger.warning(f"File URL or type missing for file_id: {file_id}")
-                await say(f"Could not process file `{file_data.get('name', 'unknown')}`: Missing URL or type.")
+                await client.chat_postMessage(channel=channel_id, text=f"Could not process file `{file_data.get('name', 'unknown')}`: Missing URL or type.")
         else:
             logger.warning(f"Could not retrieve file info for file_id: {file_id}")
-            await say(f"Could not retrieve information for file `{file_id}`.")
+            await client.chat_postMessage(channel=channel_id, text=f"Could not retrieve information for file `{file_id}`.")
 
     except Exception as e:
         logger.error(f"Error handling file_shared event or storing file metadata: {e}")
-        await say(f"An error occurred while processing your file: {e}")
+        await client.chat_postMessage(channel=channel_id, text=f"An error occurred while processing your file: {e}")
 
 @slack_app.event("file_shared")
-async def handle_file_shared(event, say, logger, context):
+async def handle_file_shared(event, client, logger, context):
     """
     This handler receives all file_shared events.
     It immediately delegates processing to a background task to avoid Slack retries.
     """
-    asyncio.create_task(process_file_shared_background(event, say, logger, context))
+    asyncio.create_task(process_file_shared_background(event, client, logger, context))
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     """Transcribes audio content using OpenAI Whisper via LLMServiceManager."""
