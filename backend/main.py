@@ -83,8 +83,8 @@ slack_handler = AsyncSlackRequestHandler(slack_app)
 app = FastAPI()
 
 # Pydantic model for waitlist request
-# class WaitlistRequest(BaseModel):
-#     email: EmailStr
+class WaitlistRequest(BaseModel):
+    email: EmailStr
 
 # @app.post("/webhooks/polar-license")
 # async def polar_license_webhook(request: Request):
