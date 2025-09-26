@@ -240,25 +240,35 @@ async def process_and_store_content(
 
 async def is_channel_enabled(rls_supabase_client: Client, team_id: str, channel_id: str, logger) -> bool:
     """Check if a public or private channel is enabled for the bot."""
+    logger.info(f"AUTH: Checking if channel {channel_id} is enabled for workspace {team_id}.")
     if not (channel_id.startswith('C') or channel_id.startswith('G')):
+        logger.info("AUTH: Channel is a DM or Group DM, skipping enabled check.")
         return True # DMs and Group DMs don't need to be "enabled"
     
+    logger.info("AUTH: Querying Supabase for channel enablement.")
     response = await asyncio.to_thread(
         rls_supabase_client.from_('workspace_channels').select('is_enabled').eq('workspace_id', team_id).eq('channel_id', channel_id).execute
     )
+    logger.info("AUTH: Supabase query for channel enablement completed.")
     channel_config = response.data
     
     if not channel_config or not channel_config[0]['is_enabled']:
-        logger.info(f"Ignoring event from disabled channel {channel_id} in workspace {team_id}.")
+        logger.info(f"AUTH: Channel {channel_id} is NOT enabled.")
         return False
+    logger.info(f"AUTH: Channel {channel_id} is enabled.")
     return True
 
 async def is_user_authorized(rls_supabase_client: Client, team_id: str, user_id: str) -> bool:
     """Check if a single user is in the authorized_users table."""
+    logger.info(f"AUTH: Checking if user {user_id} is authorized in workspace {team_id}.")
+    logger.info("AUTH: Querying Supabase for user authorization.")
     response = await asyncio.to_thread(
         rls_supabase_client.from_('authorized_users').select('user_id').eq('workspace_id', team_id).eq('user_id', user_id).execute
     )
-    return bool(response.data)
+    logger.info("AUTH: Supabase query for user authorization completed.")
+    is_auth = bool(response.data)
+    logger.info(f"AUTH: User {user_id} authorization status: {is_auth}.")
+    return is_auth
 
 async def is_user_admin(user_id: str, client) -> bool:
     """Check if a user is an admin or owner of the workspace."""
@@ -311,6 +321,7 @@ async def are_all_group_members_authorized(rls_supabase_client: Client, team_id:
 
 async def check_authorization(context, body, logger, say):
     """Main authorization function to orchestrate all checks."""
+    logger.info("AUTH: Starting authorization check.")
     channel_id = context.get("channel_id")
     user_id = context.get("user_id")
     team_id = context.get("team_id")
@@ -324,11 +335,12 @@ async def check_authorization(context, body, logger, say):
     event_type = body.get("event", {}).get("type")
 
     if not all([channel_id, user_id, team_id]):
-        logger.warning("Missing channel_id, user_id, or team_id in event context.")
+        logger.warning("AUTH: Missing channel_id, user_id, or team_id in event context.")
         await say("Error: Missing context information. Please try again or contact support.")
         return False
 
     try:
+        logger.info(f"AUTH: Creating RLS Supabase client for workspace {team_id} and channel {channel_id}.")
         options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
         rls_supabase_client = create_client(
             supabase_url, 
@@ -336,6 +348,7 @@ async def check_authorization(context, body, logger, say):
             options=options
         )
         context["rls_supabase"] = rls_supabase_client
+        logger.info("AUTH: RLS Supabase client created successfully.")
 
         # 1. Check if the channel is enabled
         if not await is_channel_enabled(rls_supabase_client, team_id, channel_id, logger):
@@ -349,13 +362,13 @@ async def check_authorization(context, body, logger, say):
         requires_user_auth = (event_type in ["message", "file_shared", "app_mention"] and not channel_id.startswith('D')) or command
         
         if requires_user_auth and not user_is_authorized:
-            logger.info(f"Ignoring interactive event from unauthorized user {user_id} in channel {channel_id}.")
+            logger.warning(f"AUTH: Unauthorized user {user_id} attempted an action in channel {channel_id}.")
             await say("You are not authorized to interact with this bot. Please contact your workspace admin.")
             return False
         
         # 4. For DMs, the single user must be authorized
         if channel_id.startswith('D') and not user_is_authorized:
-            logger.info(f"Ignoring DM event from unauthorized user {user_id}.")
+            logger.warning(f"AUTH: Unauthorized user {user_id} attempted to interact in a DM.")
             await say("You are not authorized to interact with this bot.")
             return False
 
@@ -364,10 +377,11 @@ async def check_authorization(context, body, logger, say):
             await say("This group chat contains unauthorized members. The bot can only interact in group DMs where all members are authorized.")
             return False
         
+        logger.info("AUTH: Authorization check passed successfully.")
         return True # All checks passed
 
     except Exception as e:
-        logger.error(f"An internal error occurred during authorization: {e}")
+        logger.error(f"AUTH: An internal error occurred during authorization: {e}", exc_info=True)
         await say(f"An internal error occurred during authorization: {e}")
         return False
 
