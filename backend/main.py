@@ -82,6 +82,10 @@ slack_handler = AsyncSlackRequestHandler(slack_app)
 
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
 @app.post("/slack/events")
 async def endpoint(req: Request):
     return await slack_handler.handle(req)
