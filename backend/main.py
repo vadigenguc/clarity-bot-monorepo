@@ -82,6 +82,9 @@ slack_handler = AsyncSlackRequestHandler(slack_app)
 
 app = FastAPI()
 
+@app.post("/slack/events")
+async def endpoint(req: Request):
+    return await slack_handler.handle(req)
 
 # @app.post("/webhooks/polar-license")
 # async def polar_license_webhook(request: Request):
