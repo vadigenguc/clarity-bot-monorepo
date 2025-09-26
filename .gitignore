@@ -39,3 +39,11 @@ Thumbs.db
 
 # IDE specific
 .idea/
+
+# Private and local folders
+keys/
+docs/
+testfiles/
+web/
+deploy-to-netlify/
+website/

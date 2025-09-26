@@ -8,3 +8,6 @@ pdfminer.six
 python-docx
 openpyxl
 pandas
+fastapi
+uvicorn
+google-cloud-aiplatform[generative_models]

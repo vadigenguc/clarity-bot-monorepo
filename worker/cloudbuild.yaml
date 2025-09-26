@@ -1,7 +1,6 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'europe-west1-docker.pkg.dev/clarity-b0t/clarity-worker-repo/clarity-worker:latest', '.']
-  dir: 'worker'
+  args: ['build', '-t', 'europe-west1-docker.pkg.dev/clarity-b0t/clarity-worker-repo/clarity-worker:latest', '-f', 'worker/Dockerfile', '.']
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'europe-west1-docker.pkg.dev/clarity-b0t/clarity-worker-repo/clarity-worker:latest']
 options:
