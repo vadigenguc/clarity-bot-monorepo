@@ -48,9 +48,6 @@ _pubsub_message_topic_path = None
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
     if _pubsub_transcription_publisher is None:
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set. Pub/Sub will not function.")
-            return None, None
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription publisher will not function.")
             return None, None
@@ -66,9 +63,6 @@ def get_pubsub_transcription_publisher_client():
 def get_pubsub_embedding_publisher_client():
     global _pubsub_embedding_publisher, _pubsub_embedding_topic_path
     if _pubsub_embedding_publisher is None:
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set. Pub/Sub will not function.")
-            return None, None
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding publisher will not function.")
             return None, None
@@ -84,9 +78,6 @@ def get_pubsub_embedding_publisher_client():
 def get_pubsub_message_publisher_client():
     global _pubsub_message_publisher, _pubsub_message_topic_path
     if _pubsub_message_publisher is None:
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable not set. Pub/Sub will not function.")
-            return None, None
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub message publisher will not function.")
             return None, None
