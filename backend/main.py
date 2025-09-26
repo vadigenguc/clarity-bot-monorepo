@@ -155,9 +155,5 @@ async def handle_message(message):
     else:
         logger.error("Pub/Sub message publisher not configured. Cannot process message event.")
 
-# --- Placeholder for functions that will be moved to the worker ---
-async def process_message_background(message, context):
-    pass
-
-async def process_file_shared_background(event, context):
-    pass
+# All processing logic is now handled by the GCP worker.
+# This file is only responsible for receiving events and publishing them to Pub/Sub.
