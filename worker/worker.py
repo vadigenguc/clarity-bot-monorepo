@@ -72,9 +72,13 @@ async def receive_message(request: Request):
     message_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
     job_payload = json.loads(message_data)
 
-    # This is a simplified router. A more robust implementation might inspect the payload.
-    # For now, we assume all messages are regular chat messages.
-    await process_message_job(job_payload)
+    # Simple router to determine the job type based on the payload structure.
+    if "command_name" in job_payload:
+        await process_admin_command_job(job_payload)
+    elif "raw_message" in job_payload:
+        await process_message_job(job_payload)
+    else:
+        logger.warning(f"Worker: Unknown job type received: {job_payload}")
 
     return Response(status_code=204)
 
@@ -90,6 +94,23 @@ async def download_file_from_slack(file_url: str, slack_bot_token: str) -> bytes
 # ... [rest of the helper functions: split_audio_into_chunks, transcribe_audio_chunk, etc.]
 # ... [These functions remain unchanged]
 
+async def send_slack_message(channel_id: str, user_id: str, text: str, slack_bot_token: str):
+    """Sends a message to a Slack channel or user."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {slack_bot_token}"},
+                json={"channel": channel_id, "text": text}
+            )
+            response.raise_for_status()
+            if not response.json().get("ok"):
+                logger.error(f"Slack API error sending message to {channel_id}: {response.json().get('error')}")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error sending Slack message to {channel_id}: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        logger.error(f"Unexpected error sending Slack message to {channel_id}: {e}")
+
 # --- Job Processing Functions ---
 
 async def is_user_authorized(rls_supabase_client: Client, team_id: str, user_id: str) -> bool:
@@ -98,6 +119,14 @@ async def is_user_authorized(rls_supabase_client: Client, team_id: str, user_id:
         rls_supabase_client.from_('authorized_users').select('user_id').eq('workspace_id', team_id).eq('user_id', user_id).execute
     )
     return bool(response.data)
+
+async def process_admin_command_job(job_payload: dict):
+    """Processes a single admin command job from the queue."""
+    command_name = job_payload.get("command_name")
+    logger.info(f"Worker: Processing admin command job: {command_name}")
+    # Full implementation will be added in a future step.
+    # For now, we just log that the command was received.
+    pass
 
 async def process_message_job(job_payload: dict):
     """Processes a single message job from the queue."""
