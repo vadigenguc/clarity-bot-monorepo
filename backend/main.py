@@ -37,14 +37,17 @@ GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 PUBSUB_TRANSCRIPTION_TOPIC_NAME = "clarity-transcription-jobs" # Name of the Pub/Sub topic for transcription
 PUBSUB_EMBEDDING_TOPIC_NAME = "clarity-embedding-jobs" # Name of the Pub/Sub topic for embeddings
 PUBSUB_MESSAGE_TOPIC_NAME = "clarity-message-jobs" # Name of the Pub/Sub topic for general messages
+PUBSUB_ADMIN_TOPIC_NAME = "clarity-admin-jobs" # Name of the Pub/Sub topic for admin commands
 
 # Lazy initialization for Pub/Sub publisher clients
 _pubsub_transcription_publisher = None
 _pubsub_embedding_publisher = None
 _pubsub_message_publisher = None
+_pubsub_admin_publisher = None
 _pubsub_transcription_topic_path = None
 _pubsub_embedding_topic_path = None
 _pubsub_message_topic_path = None
+_pubsub_admin_topic_path = None
 
 def get_gcp_credentials():
     """Constructs GCP credentials from environment variables."""
@@ -107,6 +110,22 @@ def get_pubsub_message_publisher_client():
             return None, None
     return _pubsub_message_publisher, _pubsub_message_topic_path
 
+def get_pubsub_admin_publisher_client():
+    global _pubsub_admin_publisher, _pubsub_admin_topic_path
+    if _pubsub_admin_publisher is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub admin publisher will not function.")
+            return None, None
+        try:
+            credentials = get_gcp_credentials()
+            _pubsub_admin_publisher = pubsub_v1.PublisherClient(credentials=credentials)
+            _pubsub_admin_topic_path = _pubsub_admin_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_ADMIN_TOPIC_NAME)
+            logger.info("Pub/Sub admin publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub admin publisher: {e}")
+            return None, None
+    return _pubsub_admin_publisher, _pubsub_admin_topic_path
+
 # Import LLM Service Manager and Prompt Loader
 from services.llm_service import llm_service_manager
 from utils.prompt_loader import load_prompt
@@ -160,6 +179,48 @@ async def handle_message(message):
             logger.error(f"Error publishing message event to Pub/Sub: {e}")
     else:
         logger.error("Pub/Sub message publisher not configured. Cannot process message event.")
+
+# --- Slack Command Listeners ---
+async def publish_admin_command(command):
+    """Helper function to publish any admin command to Pub/Sub."""
+    publisher, topic_path = get_pubsub_admin_publisher_client()
+    if not publisher or not topic_path:
+        logger.error("Pub/Sub admin publisher not configured. Cannot process admin command.")
+        # Optionally, send an ephemeral message back to the user
+        return
+
+    try:
+        command_payload = {
+            "command_name": command["command"],
+            "team_id": command["team_id"],
+            "user_id": command["user_id"],
+            "channel_id": command["channel_id"],
+            "response_url": command["response_url"],
+            "trigger_id": command["trigger_id"],
+            "text": command.get("text", "")
+        }
+        future = publisher.publish(topic_path, json.dumps(command_payload).encode("utf-8"))
+        future.result()
+        logger.info(f"Published admin command {command['command']} to Pub/Sub topic: {topic_path}")
+    except Exception as e:
+        logger.error(f"Error publishing admin command to Pub/Sub: {e}")
+        # Optionally, send an ephemeral message back to the user
+
+@slack_app.command("/bot-list-authorized")
+async def handle_list_authorized_command(ack, command):
+    await ack()
+    await publish_admin_command(command)
+
+@slack_app.command("/bot-grant-access")
+async def handle_grant_access_command(ack, command):
+    await ack()
+    await publish_admin_command(command)
+
+@slack_app.command("/bot-revoke-access")
+async def handle_revoke_access_command(ack, command):
+    await ack()
+    await publish_admin_command(command)
+
 
 # All processing logic is now handled by the GCP worker.
 # This file is only responsible for receiving events and publishing them to Pub/Sub.
