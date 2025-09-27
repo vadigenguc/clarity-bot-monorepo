@@ -120,13 +120,128 @@ async def is_user_authorized(rls_supabase_client: Client, team_id: str, user_id:
     )
     return bool(response.data)
 
+async def is_user_admin(user_id: str, slack_bot_token: str) -> bool:
+    """Check if a user is an admin or owner of the workspace."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://slack.com/api/users.info",
+                headers={"Authorization": f"Bearer {slack_bot_token}"},
+                params={"user": user_id}
+            )
+            response.raise_for_status()
+            user_info = response.json()
+            return user_info.get("ok") and user_info.get("user", {}).get("is_admin", False)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error checking admin status for {user_id}: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Error checking admin status for {user_id}: {e}")
+    return False
+
+async def find_user_id_by_name(user_name: str, slack_bot_token: str) -> str | None:
+    """Find a user's ID by their display name."""
+    user_name = user_name.lstrip('@')
+    try:
+        async with httpx.AsyncClient() as client:
+            cursor = None
+            while True:
+                response = await client.get(
+                    "https://slack.com/api/users.list",
+                    headers={"Authorization": f"Bearer {slack_bot_token}"},
+                    params={"limit": 200, "cursor": cursor}
+                )
+                response.raise_for_status()
+                data = response.json()
+                if not data.get("ok"):
+                    logger.error(f"Slack API error listing users: {data.get('error')}")
+                    return None
+                
+                for user in data.get("members", []):
+                    if user.get("name") == user_name or user.get("profile", {}).get("display_name") == user_name:
+                        return user.get("id")
+                
+                cursor = data.get("response_metadata", {}).get("next_cursor")
+                if not cursor:
+                    break
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error finding user by name: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Error finding user by name: {e}")
+    return None
+
+async def send_response(response_url: str, text: str, is_ephemeral: bool = True):
+    """Sends a response to a Slack command's response_url."""
+    payload = {"text": text}
+    if is_ephemeral:
+        payload["response_type"] = "ephemeral"
+    else:
+        payload["response_type"] = "in_channel"
+        
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(response_url, json=payload)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error sending response to {response_url}: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Error sending response to {response_url}: {e}")
+
 async def process_admin_command_job(job_payload: dict):
     """Processes a single admin command job from the queue."""
     command_name = job_payload.get("command_name")
+    user_id = job_payload.get("user_id")
+    team_id = job_payload.get("team_id")
+    response_url = job_payload.get("response_url")
+    text = job_payload.get("text", "").strip()
+    slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
+
     logger.info(f"Worker: Processing admin command job: {command_name}")
-    # Full implementation will be added in a future step.
-    # For now, we just log that the command was received.
-    pass
+
+    if not await is_user_admin(user_id, slack_bot_token):
+        await send_response(response_url, "Sorry, only workspace admins can run this command.")
+        return
+
+    rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=ClientOptions(headers={"x-workspace-id": team_id}))
+
+    if command_name == "/bot-list-authorized":
+        response = await asyncio.to_thread(
+            rls_supabase_client.from_('authorized_users').select('user_id').execute
+        )
+        if not response.data:
+            await send_response(response_url, "No users are currently authorized.")
+            return
+        
+        user_ids = [f"<@{user['user_id']}>" for user in response.data]
+        await send_response(response_url, f"Authorized users: {', '.join(user_ids)}")
+
+    elif command_name in ["/bot-grant-access", "/bot-revoke-access"]:
+        if not text:
+            await send_response(response_url, f"Please provide a user mention. Usage: `{command_name} @username`")
+            return
+
+        target_user_id = None
+        if text.startswith("<@") and text.endswith(">"):
+            target_user_id = text[2:-1]
+        else:
+            target_user_id = await find_user_id_by_name(text, slack_bot_token)
+
+        if not target_user_id:
+            await send_response(response_url, f"Could not find a user named '{text}'.")
+            return
+
+        if command_name == "/bot-grant-access":
+            await asyncio.to_thread(
+                rls_supabase_client.from_('authorized_users').upsert({
+                    'workspace_id': team_id,
+                    'user_id': target_user_id
+                }).execute
+            )
+            await send_response(response_url, f"Access granted to <@{target_user_id}>.")
+        
+        elif command_name == "/bot-revoke-access":
+            await asyncio.to_thread(
+                rls_supabase_client.from_('authorized_users').delete().eq('user_id', target_user_id).execute
+            )
+            await send_response(response_url, f"Access revoked for <@{target_user_id}>.")
 
 async def process_message_job(job_payload: dict):
     """Processes a single message job from the queue."""
