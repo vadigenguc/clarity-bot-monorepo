@@ -139,8 +139,8 @@ async def is_user_admin(user_id: str, slack_bot_token: str) -> bool:
     return False
 
 async def find_user_id_by_name(user_name: str, slack_bot_token: str) -> str | None:
-    """Find a user's ID by their display name."""
-    user_name = user_name.lstrip('@')
+    """Find a user's ID by their display name, handling spaces."""
+    user_name_cleaned = user_name.lstrip('@').strip()
     try:
         async with httpx.AsyncClient() as client:
             cursor = None
@@ -157,7 +157,7 @@ async def find_user_id_by_name(user_name: str, slack_bot_token: str) -> str | No
                     return None
                 
                 for user in data.get("members", []):
-                    if user.get("name") == user_name or user.get("profile", {}).get("display_name") == user_name:
+                    if user.get("name") == user_name_cleaned or user.get("profile", {}).get("display_name") == user_name_cleaned:
                         return user.get("id")
                 
                 cursor = data.get("response_metadata", {}).get("next_cursor")
