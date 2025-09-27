@@ -163,6 +163,7 @@ async def handle_message(message):
     if publisher and topic_path:
         try:
             message_payload = {
+                "type": "message",
                 "team_id": message.get("team"),
                 "channel_id": message.get("channel"),
                 "user_id": message.get("user"),
@@ -186,11 +187,11 @@ async def publish_admin_command(command):
     publisher, topic_path = get_pubsub_admin_publisher_client()
     if not publisher or not topic_path:
         logger.error("Pub/Sub admin publisher not configured. Cannot process admin command.")
-        # Optionally, send an ephemeral message back to the user
         return
 
     try:
         command_payload = {
+            "type": "admin_command",
             "command_name": command["command"],
             "team_id": command["team_id"],
             "user_id": command["user_id"],
@@ -204,7 +205,6 @@ async def publish_admin_command(command):
         logger.info(f"Published admin command {command['command']} to Pub/Sub topic: {topic_path}")
     except Exception as e:
         logger.error(f"Error publishing admin command to Pub/Sub: {e}")
-        # Optionally, send an ephemeral message back to the user
 
 @slack_app.command("/bot-list-authorized")
 async def handle_list_authorized_command(ack, command):
@@ -221,6 +221,55 @@ async def handle_revoke_access_command(ack, command):
     await ack()
     await publish_admin_command(command)
 
+@slack_app.command("/clarity-activate")
+async def handle_clarity_activate_command(ack, body, client, logger):
+    await ack()
+    logger.info(f"Received /clarity-activate command: {body}")
+    # This command's only job is to open the modal. The logic is in the worker.
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal",
+            "callback_id": "activate_license_modal",
+            "title": {"type": "plain_text", "text": "Activate Founder Membership"},
+            "submit": {"type": "plain_text", "text": "Activate"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "license_key_input_block",
+                    "label": {"type": "plain_text", "text": "Enter your Founder License Key"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "license_key_input",
+                        "placeholder": {"type": "plain_text", "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."},
+                    }
+                }
+            ]
+        }
+    )
+
+@slack_app.event("app_home_opened")
+async def handle_app_home_opened(event, logger):
+    """
+    This handler receives app_home_opened events.
+    It immediately publishes the event to a Pub/Sub topic for background processing.
+    """
+    publisher, topic_path = get_pubsub_message_publisher_client()
+    if publisher and topic_path:
+        try:
+            payload = {
+                "type": "app_home_opened",
+                "user_id": event.get("user"),
+                "team_id": event.get("team"),
+                "raw_event": event
+            }
+            future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+            future.result()
+            logger.info(f"Published app_home_opened event for user {event.get('user')} to Pub/Sub topic: {topic_path}")
+        except Exception as e:
+            logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}")
+    else:
+        logger.error("Pub/Sub message publisher not configured. Cannot process app_home_opened event.")
 
 # All processing logic is now handled by the GCP worker.
 # This file is only responsible for receiving events and publishing them to Pub/Sub.
