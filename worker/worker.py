@@ -365,6 +365,14 @@ async def process_file_shared_job(job_payload: dict):
     message_ts = job_payload.get("message_ts") # For threaded replies
     
     try:
+        # Idempotency Check: See if this file has already been processed
+        existing_file_response = await asyncio.to_thread(
+            rls_supabase.from_('slack_files').select('id').eq('slack_file_id', file_id).execute
+        )
+        if existing_file_response.data:
+            logger.warning(f"Duplicate file_shared job received for file {file_id}. Ignoring.")
+            return
+
         # Store initial metadata
         await asyncio.to_thread(
             rls_supabase.from_('slack_files').insert({
