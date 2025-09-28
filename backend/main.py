@@ -170,17 +170,29 @@ async def handle_file_shared(event, say):
     """
     Handles file_shared events, publishing them for background processing if the bot is mentioned.
     """
+    channel_id = event.get('channel_id')
+    user_id = event.get('user_id')
+
+    # Requirement: Reject files in DMs
+    if channel_id.startswith('D'):
+        await say(
+            channel=user_id,
+            text="You can not send files via DM. Please share your file in the relevant channel for me to process. Do not forget to mention me."
+        )
+        return
+
     # Acknowledge the event immediately to prevent timeouts, but only if explicitly asked to ingest.
     bot_user_id_res = await slack_app.client.auth_test()
     bot_user_id = bot_user_id_res.get("user_id")
     
-    history_response = await slack_app.client.conversations_history(channel=event.get('channel_id'), limit=5)
+    history_response = await slack_app.client.conversations_history(channel=channel_id, limit=5)
     message_with_file = next((msg for msg in history_response.get('messages', []) 
-                              if msg.get('user') == event.get('user_id') and 'files' in msg 
+                              if msg.get('user') == user_id and 'files' in msg 
                               and any(f['id'] == event.get('file_id') for f in msg['files'])), None)
 
     if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
-        await say("Thanks! I've received your file and will start processing it now.")
+        # Respond in a thread
+        await say(text="Thanks! I've received your file and will start processing it now.", thread_ts=message_with_file.get("ts"))
         
         publisher, topic_path = get_pubsub_message_publisher_client()
         if not publisher or not topic_path:

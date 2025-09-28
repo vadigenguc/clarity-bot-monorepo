@@ -188,9 +188,13 @@ async def check_authorization(job_payload: dict, slack_bot_token: str) -> tuple[
     channel_id = job_payload.get("channel_id")
     user_id = job_payload.get("user_id")
     team_id = job_payload.get("team_id")
+    message_ts = job_payload.get("message_ts") # For threaded replies
 
     if not all([channel_id, user_id, team_id]):
         logger.warning(f"Missing context in job payload: {job_payload}")
+        # Send generic error to thread if possible
+        if channel_id and message_ts:
+            await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
         return False, None, "Error: Missing context information."
 
     try:
@@ -198,23 +202,28 @@ async def check_authorization(job_payload: dict, slack_bot_token: str) -> tuple[
         rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
 
         if not await is_channel_enabled(rls_supabase_client, team_id, channel_id):
+            await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
             return False, None, "This channel is not enabled for bot interaction."
 
         user_is_authorized = await is_user_authorized(rls_supabase_client, team_id, user_id)
         
         if channel_id.startswith('D') and not user_is_authorized:
+            # No thread for DMs, so no generic message
             return False, None, "You are not authorized to interact with this bot."
 
         if not await are_all_group_members_authorized(rls_supabase_client, team_id, channel_id, slack_bot_token):
+            await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
             return False, None, "This group chat contains unauthorized members."
         
         # For public/private channels, the user must be authorized
         if (channel_id.startswith('C') or channel_id.startswith('G')) and not user_is_authorized:
-             return False, None, "You are not authorized to interact with this bot in this channel."
+            await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
+            return False, None, "You are not authorized to interact with this bot in this channel."
 
         return True, rls_supabase_client, None
     except Exception as e:
         logger.error(f"An internal error occurred during authorization: {e}")
+        await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
         return False, None, f"An internal error occurred during authorization: {e}"
 
 # --- Document Processing and Vectorization ---
