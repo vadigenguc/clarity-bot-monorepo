@@ -188,8 +188,9 @@ async def handle_file_shared(event, say):
             return
 
         try:
+            team_id = event.get("team_id") or (message_with_file.get("files")[0].get("user_team") if message_with_file.get("files") else None)
             payload = {
-                "type": "file_shared", "team_id": event.get("team_id"), "channel_id": event.get("channel_id"),
+                "type": "file_shared", "team_id": team_id, "channel_id": event.get("channel_id"),
                 "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
                 "message_ts": message_with_file.get("ts")
             }
