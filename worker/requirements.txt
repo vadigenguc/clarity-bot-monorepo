@@ -11,3 +11,4 @@ pandas
 fastapi
 uvicorn
 google-cloud-aiplatform[generative_models]
+pdfplumber
