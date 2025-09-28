@@ -147,6 +147,8 @@ async def endpoint(req: Request):
 @slack_app.message()
 async def handle_message(message):
     """Publishes all message events to Pub/Sub for background processing."""
+    if message.get("subtype") == "file_share":
+        return # Ignore file_share subtypes to avoid duplicate processing
     publisher, topic_path = get_pubsub_message_publisher_client()
     if not publisher or not topic_path:
         logger.error("Pub/Sub message publisher not configured.")
