@@ -18,8 +18,6 @@ import json # For serializing job payloads
 from google.cloud import pubsub_v1
 from google.oauth2 import service_account
 
-# Document parsing libraries
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -126,13 +124,6 @@ def get_pubsub_admin_publisher_client():
             return None, None
     return _pubsub_admin_publisher, _pubsub_admin_topic_path
 
-# Import LLM Service Manager and Prompt Loader
-from services.llm_service import llm_service_manager
-from utils.prompt_loader import load_prompt
-
-# Define max file size for direct transcription (25MB for Whisper API)
-MAX_DIRECT_TRANSCRIPTION_SIZE_MB = 20
-MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES = MAX_DIRECT_TRANSCRIPTION_SIZE_MB * 1024 * 1024
 
 # Initialize Slack Bolt App
 slack_app = AsyncApp(
@@ -155,31 +146,57 @@ async def endpoint(req: Request):
 # --- Slack Event Listeners ---
 @slack_app.message()
 async def handle_message(message):
-    """
-    This handler receives all message events.
-    It immediately publishes the event to a Pub/Sub topic for background processing.
-    """
+    """Publishes all message events to Pub/Sub for background processing."""
     publisher, topic_path = get_pubsub_message_publisher_client()
-    if publisher and topic_path:
+    if not publisher or not topic_path:
+        logger.error("Pub/Sub message publisher not configured.")
+        return
+
+    try:
+        payload = {
+            "type": "message", "team_id": message.get("team"), "channel_id": message.get("channel"),
+            "user_id": message.get("user"), "message_ts": message.get("ts"), "text": message.get("text"),
+            "raw_message": message
+        }
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
+    except Exception as e:
+        logger.error(f"Error publishing message event to Pub/Sub: {e}")
+
+@slack_app.event("file_shared")
+async def handle_file_shared(event, say):
+    """
+    Handles file_shared events, publishing them for background processing if the bot is mentioned.
+    """
+    # Acknowledge the event immediately to prevent timeouts, but only if explicitly asked to ingest.
+    bot_user_id_res = await slack_app.client.auth_test()
+    bot_user_id = bot_user_id_res.get("user_id")
+    
+    history_response = await slack_app.client.conversations_history(channel=event.get('channel_id'), limit=5)
+    message_with_file = next((msg for msg in history_response.get('messages', []) 
+                              if msg.get('user') == event.get('user_id') and 'files' in msg 
+                              and any(f['id'] == event.get('file_id') for f in msg['files'])), None)
+
+    if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
+        await say("Thanks! I've received your file and will start processing it now.")
+        
+        publisher, topic_path = get_pubsub_message_publisher_client()
+        if not publisher or not topic_path:
+            logger.error("Pub/Sub message publisher not configured for file sharing.")
+            return
+
         try:
-            message_payload = {
-                "type": "message",
-                "team_id": message.get("team"),
-                "channel_id": message.get("channel"),
-                "user_id": message.get("user"),
-                "message_ts": message.get("ts"),
-                "text": message.get("text"),
-                "event_ts": message.get("event_ts"),
-                "channel_type": message.get("channel_type"),
-                "raw_message": message
+            payload = {
+                "type": "file_shared", "team_id": event.get("team_id"), "channel_id": event.get("channel_id"),
+                "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
+                "message_ts": message_with_file.get("ts")
             }
-            future = publisher.publish(topic_path, json.dumps(message_payload).encode("utf-8"))
+            future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
             future.result()
-            logger.info(f"Published message event for {message.get('ts')} to Pub/Sub topic: {topic_path}")
         except Exception as e:
-            logger.error(f"Error publishing message event to Pub/Sub: {e}")
+            logger.error(f"Error publishing file_shared event to Pub/Sub: {e}")
     else:
-        logger.error("Pub/Sub message publisher not configured. Cannot process message event.")
+        logger.info(f"Ignoring file {event.get('file_id')} as bot was not explicitly instructed to ingest.")
 
 # --- Slack Command Listeners ---
 async def publish_admin_command(command):
@@ -222,54 +239,72 @@ async def handle_revoke_access_command(ack, command):
     await publish_admin_command(command)
 
 @slack_app.command("/clarity-activate")
-async def handle_clarity_activate_command(ack, body, client, logger):
+async def handle_clarity_activate_command(ack, body, client):
     await ack()
-    logger.info(f"Received /clarity-activate command: {body}")
-    # This command's only job is to open the modal. The logic is in the worker.
     await client.views_open(
         trigger_id=body["trigger_id"],
         view={
-            "type": "modal",
-            "callback_id": "activate_license_modal",
+            "type": "modal", "callback_id": "activate_license_modal",
             "title": {"type": "plain_text", "text": "Activate Founder Membership"},
             "submit": {"type": "plain_text", "text": "Activate"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "license_key_input_block",
-                    "label": {"type": "plain_text", "text": "Enter your Founder License Key"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "license_key_input",
-                        "placeholder": {"type": "plain_text", "text": "e.g., CLARITY-FOUNDER-a1b2c3d4-..."},
-                    }
-                }
-            ]
+            "blocks": [{
+                "type": "input", "block_id": "license_key_input_block",
+                "label": {"type": "plain_text", "text": "Enter your Founder License Key"},
+                "element": {"type": "plain_text_input", "action_id": "license_key_input"}
+            }]
         }
     )
 
+@slack_app.action("open_license_activation_modal")
+async def open_license_modal(ack, body, client):
+    await ack()
+    await client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "type": "modal", "callback_id": "activate_license_modal",
+            "title": {"type": "plain_text", "text": "Activate Founder Membership"},
+            "submit": {"type": "plain_text", "text": "Activate"},
+            "blocks": [{
+                "type": "input", "block_id": "license_key_input_block",
+                "label": {"type": "plain_text", "text": "Enter your Founder License Key"},
+                "element": {"type": "plain_text_input", "action_id": "license_key_input"}
+            }]
+        }
+    )
+
+@slack_app.view("activate_license_modal")
+async def handle_license_activation_submission(ack, body, logger):
+    await ack()
+    publisher, topic_path = get_pubsub_message_publisher_client()
+    if not publisher or not topic_path:
+        logger.error("Pub/Sub message publisher not configured for license activation.")
+        return
+
+    try:
+        license_key = body["view"]["state"]["values"]["license_key_input_block"]["license_key_input"]["value"]
+        payload = {
+            "type": "activate_license", "user_id": body["user"]["id"], "team_id": body["user"]["team_id"],
+            "license_key": license_key
+        }
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
+    except Exception as e:
+        logger.error(f"Error publishing license activation to Pub/Sub: {e}")
+
 @slack_app.event("app_home_opened")
 async def handle_app_home_opened(event, logger):
-    """
-    This handler receives app_home_opened events.
-    It immediately publishes the event to a Pub/Sub topic for background processing.
-    """
+    """Publishes app_home_opened events to Pub/Sub for background processing."""
     publisher, topic_path = get_pubsub_message_publisher_client()
-    if publisher and topic_path:
-        try:
-            payload = {
-                "type": "app_home_opened",
-                "user_id": event.get("user"),
-                "team_id": event.get("team"),
-                "raw_event": event
-            }
-            future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
-            future.result()
-            logger.info(f"Published app_home_opened event for user {event.get('user')} to Pub/Sub topic: {topic_path}")
-        except Exception as e:
-            logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}")
-    else:
-        logger.error("Pub/Sub message publisher not configured. Cannot process app_home_opened event.")
+    if not publisher or not topic_path:
+        logger.error("Pub/Sub message publisher not configured.")
+        return
 
-# All processing logic is now handled by the GCP worker.
-# This file is only responsible for receiving events and publishing them to Pub/Sub.
+    try:
+        payload = {
+            "type": "app_home_opened", "user_id": event.get("user"), "team_id": event.get("team"),
+            "raw_event": event
+        }
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
+    except Exception as e:
+        logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}")
