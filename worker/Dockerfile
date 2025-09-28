@@ -15,5 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY worker/worker.py .
 COPY backend/ ./backend/
 
-# Command to run the application using uvicorn
-CMD ["uvicorn", "worker:app", "--host", "0.0.0.0", "--port", "8080"]
+# Copy the startup script and make it executable
+COPY worker/start.sh .
+RUN chmod +x ./start.sh
+
+# Command to run the application using the startup script
+CMD ["./start.sh"]

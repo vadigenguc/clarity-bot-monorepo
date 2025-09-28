@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.vscode/
+.DS_Store
+.env
+.env.*
+
+# Node.js (for Netlify functions)
+node_modules/
+dist/
+.parcel-cache/
+
+# Vercel / Netlify specific
+.vercel/
+.netlify/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Operating System files
+Thumbs.db
+.DS_Store
+
+# Google Cloud specific
+.gcloud/
+
+# IDE specific
+.idea/
+
+# Private and local folders
+keys/
+docs/
+.clinerules/
+.pytest_cache/
+clarity_bot.egg-info/
+deploy-to-netlify/
+migrations/
+netlify/
+frontend/
+testfiles/
+tests/
+venv/
+__pycache__/
+web/
+website/
+.gitignore
+.env
+test_pubsub_publisher.py
+test_transcription.py
+full-worker-job.yaml
+worker-env-vars.yaml
+vercel-pubsub-publisher-key.json
+Presentation1.pptx
+Picture2.png
+Opera Snapshot_2025-09-20_230035_www.claritypm.xyz.png
+Capture.JPG
+Picture1.png
+logo.png
+logo.svg
+start.bat
+Clarity.code-workspace
+.gitignore

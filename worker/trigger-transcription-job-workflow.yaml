@@ -1,0 +1,13 @@
+main:
+  steps:
+  - runJob:
+      call: googleapis.run.v2.projects.locations.jobs.run # Corrected API call for Workflows
+      args:
+        name: projects/clarity-b0t/locations/europe-west1/jobs/clarity-transcription-worker
+        body: {}
+      result: jobExecution
+  - logResult:
+      call: sys.log
+      args:
+        text: '${"Cloud Run Job execution started: " + jobExecution.name}'
+        severity: INFO

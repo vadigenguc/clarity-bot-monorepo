@@ -1,0 +1,517 @@
+html {
+    scroll-behavior: auto; /* Disable native smooth scrolling */
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #0D1117;
+    color: #E6EDF3;
+    overflow-x: hidden;
+}
+.gradient-text {
+    background: linear-gradient(90deg, #30C6B8, #7A5AF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+}
+.hero-glow {
+    box-shadow: 0 0 80px 0 rgba(122, 90, 248, 0.3), 0 0 50px 0 rgba(48, 198, 184, 0.2);
+}
+.feature-card {
+    border: 1px solid #30363D;
+    background: rgba(13, 17, 23, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), 0 0 20px rgba(122, 90, 248, 0.2);
+}
+.cta-button {
+    background: linear-gradient(90deg, #30C6B8, #7A5AF8);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cta-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(122, 90, 248, 0.5);
+}
+.secondary-button {
+    background-color: transparent;
+    border: 1px solid #30363D;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.secondary-button:hover {
+    background-color: #161B22;
+    border-color: #8b949e;
+}
+.scroll-animation {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.scroll-animation.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.bg-pattern {
+    background-image: radial-gradient(#161B22 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* Slack Mockup Styles */
+.slack-mockup {
+    background: #1a1d21; /* From source */
+    border-radius: 12px;
+    padding: 1rem;
+    border: 1px solid #2f3136; /* From source */
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+    transition: transform 0.4s ease-out;
+    position: relative;
+    height: 490px; /* Set a fixed height for the carousel */
+    display: flex;
+    flex-direction: column;
+}
+
+.slack-mockup:hover {
+    transform: perspective(1200px) rotateY(0deg) rotateX(0deg);
+}
+
+/* Carousel Styles */
+.slide-container {
+    position: relative;
+    flex-grow: 1;
+    min-height: 0;
+}
+
+.slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0;
+    transition: opacity 1s ease-in-out;
+    visibility: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.slide.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.slide-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+    margin-right: -8px;
+}
+
+.slide-content::-webkit-scrollbar {
+    width: 6px;
+}
+.slide-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+.slide-content::-webkit-scrollbar-thumb {
+    background-color: #4f545c;
+    border-radius: 3px;
+}
+
+
+.slack-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #2f3136; /* From source */
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+}
+
+.slack-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.dot-red { background: #ff5f56; }
+.dot-yellow { background: #ffbd2e; }
+.dot-green { background: #27ca3f; }
+
+.slack-title {
+    margin-left: auto;
+    color: #ffffff; /* From source */
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.message {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.25rem;
+}
+
+.message:last-child {
+    margin-bottom: 0;
+}
+
+.avatar, .avatar-bot {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.avatar {
+     background: linear-gradient(45deg, #4a9eff, #00d2ff); /* From source */
+}
+
+.avatar-bot {
+    background-color: #161B22;
+}
+
+.message-content {
+    flex: 1;
+}
+
+.message-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.username {
+    font-weight: 600;
+    color: #ffffff; /* From source */
+}
+
+.timestamp {
+    font-size: 0.75rem;
+    color: #72767d;
+}
+
+.message-text {
+    color: #dcddde; /* From source */
+    line-height: 1.4;
+}
+
+.mention {
+    background: #1264a3; /* From source */
+    color: #ffffff;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.file-attachment {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(255, 255, 255, 0.03); /* From source */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* From source */
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.file-icon {
+    width: 40px;
+    height: 40px;
+    background: #4a9eff; /* From source */
+    border-radius: 50%; /* From source - circular */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.play-button-large {
+    color: white;
+    font-size: 1rem;
+    margin-left: 2px; /* From source */
+}
+
+.file-info {
+    flex: 1;
+}
+
+.file-name {
+    color: #ffffff; /* From source */
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.file-size {
+    color: rgba(255, 255, 255, 0.6); /* From source */
+    font-size: 0.8rem;
+}
+
+.bot-response {
+    background: rgba(74, 158, 255, 0.1); /* From source */
+    border-left: 3px solid #4a9eff; /* From source */
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.bot-response strong {
+    color: #ffffff;
+}
+
+.bot-response small {
+    color: #8b949e;
+    font-size: 0.8rem;
+}
+
+.bot-response .actions {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.bot-response .action-button {
+    background-color: #238636;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.bot-response .action-button.secondary {
+    background-color: #30363d;
+}
+
+.bot-response .action-button.edit {
+    background-color: #3b82f6; /* Light Blue */
+}
+
+.bot-response .action-button.discard {
+    background-color: #da3633; /* Red */
+}
+
+.audio-player-full {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* From source */
+    margin-top: 0.5rem; /* From source */
+    padding: 0 0.75rem; /* From source */
+}
+
+.progress-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3); /* From source */
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+}
+
+.progress-handle {
+    position: absolute;
+    left: 20%; /* From source */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: #4a9eff; /* From source */
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.progress-handle::before { /* From source */
+    content: '';
+    position: absolute;
+    left: -100px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 100px;
+    height: 4px;
+    background: #4a9eff;
+    border-radius: 2px;
+}
+
+.audio-time { /* From source */
+    font-size: 0.75rem;
+    color: #72767d;
+}
+
+.jira-link {
+    color: #5899e0; /* Slack link blue */
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.jira-link:hover {
+    text-decoration: underline;
+}
+
+/* FAQ Section */
+.faq-item {
+    border-bottom: 1px solid #30363D;
+}
+.faq-question {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out;
+}
+.faq-toggle {
+    transition: transform 0.3s ease;
+}
+
+/* Founder Card */
+.founder-card {
+    border: 1px solid #7A5AF8;
+    background: linear-gradient(145deg, rgba(122, 90, 248, 0.1), rgba(13, 17, 23, 0.1));
+    box-shadow: 0 0 50px rgba(122, 90, 248, 0.2);
+    /* Ensure original size and styling are preserved */
+    width: 100%; /* Override any flex-basis or grid-column settings */
+    max-width: 40rem; /* Keep original max-width */
+    height: auto; /* Keep original height behavior */
+    margin: 0 auto; /* Center if flex container allows */
+    padding: 2rem; /* Original padding */
+    border-radius: 1rem; /* Original border-radius */
+    text-align: left; /* Original text alignment */
+    position: relative; /* Ensure z-index works */
+    z-index: 10; /* Bring to front */
+}
+
+.pricing-cards-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem; /* Space between cards */
+    position: relative;
+    margin-top: 2rem; /* Adjust as needed */
+}
+
+.pricing-card {
+    border: 1px solid #30363D;
+    background: rgba(13, 17, 23, 0.7); /* Slightly darker background */
+    backdrop-filter: blur(10px); /* Glassy effect */
+    -webkit-backdrop-filter: blur(10px);
+    padding: 2rem;
+    border-radius: 1rem;
+    text-align: left;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 80%; /* 80% height of the main card */
+    width: 50%; /* 50% width of the main card */
+    transform: scale(0.8); /* Visually scale down */
+    opacity: 0.8; /* Slightly less transparent */
+    transition: all 0.3s ease;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(122, 90, 248, 0.1); /* Darker glow */
+}
+
+.pricing-card .price-group {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.pricing-card .price-monthly {
+    font-size: 2.5rem; /* Larger for emphasis */
+    font-weight: 700;
+    color: #E6EDF3;
+}
+
+.pricing-card .price-yearly {
+    font-size: 1.2rem;
+    color: #8b949e;
+    text-decoration: none; /* Remove underline */
+}
+
+.pricing-card .marketing-badge {
+    display: inline-block;
+    background: linear-gradient(90deg, #30C6B8, #7A5AF8);
+    color: white;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 4px 15px rgba(122, 90, 248, 0.4);
+}
+
+.pricing-card .secondary-button {
+    background-color: #161B22; /* Darker background for contrast */
+    border-color: #4f545c; /* Slightly lighter border */
+    color: #E6EDF3;
+    font-weight: 600;
+    padding: 1rem 2rem; /* More prominent padding */
+    border-radius: 0.75rem; /* Slightly more rounded */
+    transition: all 0.3s ease;
+}
+
+.pricing-card .secondary-button:hover {
+    background-color: #21262d; /* Even darker on hover */
+    border-color: #8b949e;
+    transform: translateY(-2px); /* Slight lift effect */
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+}
+
+.pricing-card ul {
+    font-size: 1rem; /* Consistent font size */
+    color: #C9D1D9; /* Lighter text for features */
+}
+
+.pricing-card ul li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.75rem; /* More space between list items */
+}
+
+.pricing-card ul li span {
+    color: #30C6B8; /* Teal checkmark */
+    margin-right: 0.75rem;
+}
+
+.pricing-card.firestarter-card {
+    position: absolute;
+    left: 0;
+    transform: translateX(-50%) scale(0.8); /* Position left and scale */
+    z-index: 5;
+}
+
+.pricing-card.business-card {
+    position: absolute;
+    right: 0;
+    transform: translateX(50%) scale(0.8); /* Position right and scale */
+    z-index: 5;
+}
+
+#header-cta {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+}
+#header-cta.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}

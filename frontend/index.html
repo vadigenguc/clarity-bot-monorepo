@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Google tag (gtag.js) - Managed by Cookie Consent -->
+    <script id="google-analytics-script" data-cookie-category="analytics" data-src="https://www.googletagmanager.com/gtag/js?id=G-Y0R5CCSV2P"></script>
+    <script id="google-analytics-config" data-cookie-category="analytics">
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      // gtag('js', new Date()); // Will be called after consent
+      // gtag('config', 'G-Y0R5CCSV2P'); // Will be called after consent
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clarity Bot - Your AI Project Assistant for Slack</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Clarity Bot is an AI assistant for Slack that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly. Your project's single source of truth.">
+    <meta name="keywords" content="AI assistant, Slack bot, project management, Jira integration, product management, agile development, task automation">
+    <link rel="canonical" href="https://www.clarity-bot.com/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.clarity-bot.com/">
+    <meta property="og:title" content="Clarity Bot - Your AI Project Assistant for Slack">
+    <meta property="og:description" content="Clarity Bot is an AI assistant for Slack that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly.">
+    <meta property="og:image" content="https://www.clarity-bot.com/og-image.png"> 
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://www.clarity-bot.com/">
+    <meta property="twitter:title" content="Clarity Bot - Your AI Project Assistant for Slack">
+    <meta property="twitter:description" content="Clarity Bot is an AI assistant for Slack that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly.">
+    <meta property="twitter:image" content="https://www.clarity-bot.com/og-image.png">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "name": "Clarity Bot",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "Slack",
+          "description": "Clarity Bot is an AI assistant for Slack that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly.",
+          "offers": {
+            "@type": "Offer",
+            "price": "299",
+            "priceCurrency": "USD",
+            "description": "Founders' Circle - 70% Lifetime Discount"
+          },
+          "url": "https://www.clarity-bot.com/"
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            { "@type": "Question", "name": "How does Clarity Bot solve information overload?", "acceptedAnswer": { "@type": "Answer", "text": "Clarity Bot acts as your project's single source of truth by securely listening to conversations, reading documents, and transcribing meetings to build an intelligent knowledge base, allowing you to ask questions and get instant answers." } },
+            { "@type": "Question", "name": "How does Clarity Bot fix the broken workflow between Slack and Jira?", "acceptedAnswer": { "@type": "Answer", "text": "Clarity Bot eliminates context-switching by identifying tasks in Slack and automatically drafting Jira tickets pre-filled with context. You can approve or edit these tickets directly in Slack, boosting workflow efficiency by up to 80%." } },
+            { "@type": "Question", "name": "How does Clarity Bot help with team alignment?", "acceptedAnswer": { "@type": "Answer", "text": "Clarity Bot creates a central brain for your project, ensuring team members across different time zones are always aligned by providing consistent, accurate answers from the project's knowledge base." } },
+            { "@type": "Question", "name": "What makes Clarity Bot's AI different from a standard chatbot?", "acceptedAnswer": { "@type": "Answer", "text": "Clarity Bot is a specialist AI that uses Retrieval-Augmented Generation (RAG). It retrieves facts from your project's data before generating an answer, which prevents hallucinations and ensures accuracy." } },
+            { "@type": "Question", "name": "How does Clarity Bot handle meetings and video calls?", "acceptedAnswer": { "@type": "Answer", "text": "You can upload any audio or video recording, and Clarity Bot will transcribe it, generate a concise summary of key decisions and action items, and make the entire transcript searchable." } },
+            { "@type": "Question", "name": "What tools and file types does Clarity Bot support?", "acceptedAnswer": { "@type": "Answer", "text": "Clarity Bot's deepest integration is with Jira, with active development for Confluence, Asana, Trello, and GitHub. It supports PDF, DOCX, TXT, XLSX, CSV, MP3, and MP4 files." } },
+            { "@type": "Question", "name": "What is the 'Founding Member' offer?", "acceptedAnswer": { "@type": "Answer", "text": "It's a one-time offer for 200 early adopters to get a 12-month subscription for $299, which includes a permanent 70% discount on future renewals and priority access to new features." } },
+            { "@type": "Question", "name": "When will Clarity Bot officially launch?", "acceptedAnswer": { "@type": "Answer", "text": "We are on track for a public launch before 2025 ends. Founding Members will receive priority access before the general release." } },
+            { "@type": "Question", "name": "Is my project and conversation data secure?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, security is our highest priority. Clarity Bot uses enterprise-grade security, encrypts all data, and isolates each workspace's knowledge base using Supabase's Row Level Security." } },
+            { "@type": "Question", "name": "Who can interact with the bot?", "acceptedAnswer": { "@type": "Answer", "text": "You have full control. A workspace administrator must explicitly grant access to individual users. The bot will only respond to or create tickets for these authorized users." } }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='avatarGradient' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2330C6B8'/%3E%3Cstop offset='100%25' stop-color='%237A5AF8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M12 2L2 8.5L12 22L22 8.5L12 2Z' stroke='url(%23avatarGradient)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M2 8.5L12 15L22 8.5' stroke='url(%23avatarGradient)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M12 2V15' stroke='url(%23avatarGradient)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Polar Checkout Script - Managed by Cookie Consent (Strictly Necessary) -->
+    <script id="polar-checkout-script" data-cookie-category="necessary" data-src="https://cdn.jsdelivr.net/npm/@polar-sh/checkout@0.1/dist/embed.global.js" defer data-auto-init></script>
+</head>
+<body class="bg-pattern flex flex-col min-h-screen">
+
+    <!-- Header -->
+    <header class="sticky top-0 left-0 right-0 z-50 p-6 bg-[#0D1117]/70 backdrop-blur-lg border-b border-gray-800/50 transition-colors duration-300">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="#" class="flex items-center gap-2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs><linearGradient id="avatarGradientHeader" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                    <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradientHeader)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradientHeader)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradientHeader)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="text-2xl font-bold tracking-tight">Clarity Bot</span>
+            </a>
+            <div class="flex items-center">
+                <a href="#founders-circle" id="header-cta" class="cta-button text-white font-semibold py-1 px-3 sm:py-2 sm:px-5 rounded-lg text-xs sm:text-sm">Become a Founder</a>
+                <a href="#waitlist" id="header-waitlist-cta" class="secondary-button text-white font-semibold py-1 px-3 sm:py-2 sm:px-5 rounded-lg text-xs sm:text-sm ml-2 sm:ml-3 hidden">Join Waitlist</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative flex-grow overflow-hidden">
+        
+        <!-- Background Glows -->
+        <div class="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/2 w-96 h-96 bg-purple-600/30 rounded-full filter blur-3xl opacity-50"></div>
+        <div class="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/2 w-96 h-96 bg-teal-500/30 rounded-full filter blur-3xl opacity-50"></div>
+
+        <!-- Hero Section -->
+        <section class="hero-section flex items-center justify-center px-4 pt-20 pb-10">
+            <div class="container mx-auto max-w-7xl">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <!-- Text Content -->
+                    <div class="scroll-animation text-center md:text-left">
+                        <span class="inline-block bg-gray-800 border border-gray-700 text-teal-400 text-xs font-semibold px-3 py-1 rounded-full mb-4">For Project Managers & Product Leaders</span>
+                        <h1 class="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tighter mb-6">
+                            Your project's single source of truth, <span class="gradient-text">finally in Slack.</span>
+                        </h1>
+                        <p class="max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-gray-400 mb-10">
+                            Clarity Bot is an AI assistant that listens to your project conversations, documents, and meetings to automate tasks and answer questions instantly. Stop searching. Start knowing.
+                        </p>
+                        <div id="hero-buttons-container" class="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
+                            <a href="#founders-circle" class="cta-button hero-glow text-white font-bold py-4 px-8 rounded-lg text-lg w-full sm:w-auto text-center">
+                                Become a Founder
+                            </a>
+                            <a href="#waitlist" class="secondary-button text-white font-bold py-4 px-8 rounded-lg text-lg w-full sm:w-auto text-center">
+                                Join Waitlist
+                            </a>
+                        </div>
+                    </div>
+                    <!-- Slack Mockup Visual -->
+                    <div class="scroll-animation" style="transition-delay: 800ms;">
+                        <div class="slack-mockup" role="img" aria-label="An animated mockup of the Clarity Slack bot creating Jira tickets from a meeting recording, answering questions about a document, and creating a bug report from a conversation.">
+                            <div class="slack-header">
+                                <div class="slack-dot dot-red"></div>
+                                <div class="slack-dot dot-yellow"></div>
+                                <div class="slack-dot dot-green"></div>
+                                <div class="slack-title">#product-team</div>
+                            </div>
+                            <div class="slide-container">
+                                <!-- Slide 1: Meeting Transcription -->
+                                <div class="slide active">
+                                    <div class="slide-content">
+                                        <div class="message">
+                                            <div class="avatar">SM</div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">Sarah (PM)</span>
+                                                    <span class="timestamp">10:44 AM</span>
+                                                </div>
+                                                <div class="message-text">Hey team, here is our today's call recording. <span class="mention">@Clarity Bot</span> please create the Jira tickets for the discussed issues.</div>
+                                                <div class="file-attachment">
+                                                    <div class="file-icon">
+                                                        <div class="play-button-large">▶</div>
+                                                    </div>
+                                                    <div class="file-info">
+                                                        <div class="file-name">stand-up_sept18.mp3</div>
+                                                        <div class="file-size">12:46 (22 MB)</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="message">
+                                            <div class="avatar-bot">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <defs><linearGradient id="avatarGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                                                    <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">Clarity Bot</span>
+                                                    <span class="timestamp">10:45 AM</span>
+                                                </div>
+                                                <div class="message-text">I've analyzed the recording, created the summary and tickets.</div>
+                                                <div class="file-attachment">
+                                                     <div class="file-icon" style="background: #1d92e3;">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                                                    </div>
+                                                    <div class="file-info">
+                                                        <a href="#" class="file-name jira-link">stand-up_sept18-summary.txt</a>
+                                                    </div>
+                                                </div>
+                                                <div class="bot-response">
+                                                    <strong>PRJ-128: Shopping cart bug prevents adding multiple items.</strong><br>
+                                                    <small>Bug • Due: Today • Assignee: Marcus</small>
+                                                    <div class="actions">
+                                                        <span class="action-button">Create Ticket</span>
+                                                        <span class="action-button edit">Edit</span>
+                                                        <span class="action-button discard">Discard</span>
+                                                    </div>
+                                                </div>
+                                                <div class="bot-response" style="margin-top: 0.5rem;">
+                                                    <strong>PRJ-129: Add support for separate billing/shipping addresses.</strong><br>
+                                                    <small>Story • Due: Friday • Assignee: Emile</small>
+                                                    <div class="actions">
+                                                        <span class="action-button">Create Ticket</span>
+                                                        <span class="action-button edit">Edit</span>
+                                                        <span class="action-button discard">Discard</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Slide 2: Document Q&A -->
+                                <div class="slide">
+                                    <div class="slide-content">
+                                        <div class="message">
+                                            <div class="avatar" style="background: linear-gradient(45deg, #ec4899, #f97316);">DL</div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">David (Dev)</span>
+                                                    <span class="timestamp">11:12 AM</span>
+                                                </div>
+                                                <div class="message-text"><span class="mention">@Clarity Bot</span> please ingest the latest project spec for the team.</div>
+                                                <div class="file-attachment">
+                                                    <div class="file-icon" style="background: #ef4444;">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                                                    </div>
+                                                    <div class="file-info">
+                                                        <div class="file-name">Project_Specs_V2.pdf</div>
+                                                        <div class="file-size">1.2 MB</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="message">
+                                            <div class="avatar-bot">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <defs><linearGradient id="avatarGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                                                    <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                            <div class="message-content">
+                                                 <div class="message-header">
+                                                    <span class="username">Clarity Bot</span>
+                                                    <span class="timestamp">11:12 AM</span>
+                                                </div>
+                                                <div class="message-text">✅ I've processed `Project_Specs_V2.pdf` and added it to the project knowledge base.</div>
+                                            </div>
+                                        </div>
+                                        <div class="message">
+                                            <div class="avatar">SM</div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">Sarah (PM)</span>
+                                                    <span class="timestamp">11:15 AM</span>
+                                                </div>
+                                                <div class="message-text"><span class="mention">@Clarity Bot</span> how is the subscription logic implemented according to the spec?</div>
+                                            </div>
+                                        </div>
+                                         <div class="message">
+                                            <div class="avatar-bot">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <defs><linearGradient id="avatarGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                                                    <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                            <div class="message-content">
+                                                 <div class="message-header">
+                                                    <span class="username">Clarity Bot</span>
+                                                    <span class="timestamp">11:15 AM</span>
+                                                </div>
+                                                <div class="bot-response">
+                                                   The spec outlines a tiered model (Free, Pro, Enterprise) using Stripe. The backend will handle entitlement checks via a dedicated microservice.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Slide 3: Conversational Task Creation -->
+                                <div class="slide">
+                                    <div class="slide-content">
+                                        <div class="message">
+                                            <div class="avatar" style="background: linear-gradient(45deg, #8b5cf6, #3b82f6);">KT</div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">Kevin (QA)</span>
+                                                    <span class="timestamp">02:15 PM</span>
+                                                </div>
+                                                <div class="message-text">Found a bug. When I add two items to the cart and remove the first one, the total doesn't update correctly.</div>
+                                            </div>
+                                        </div>
+                                        <div class="message">
+                                            <div class="avatar" style="background: linear-gradient(45deg, #ec4899, #f97316);">DL</div>
+                                            <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">David (Dev)</span>
+                                                    <span class="timestamp">02:16 PM</span>
+                                                </div>
+                                                <div class="message-text">Oops, that's a nasty one. Good catch.</div>
+                                            </div>
+                                        </div>
+                                        <div class="message">
+                                            <div class="avatar" style="background: linear-gradient(45deg, #8b5cf6, #3b82f6);">KT</div>
+                                             <div class="message-content">
+                                                <div class="message-header">
+                                                    <span class="username">Kevin (QA)</span>
+                                                    <span class="timestamp">02:17 PM</span>
+                                                </div>
+                                                <div class="message-text"><span class="mention">@Clarity Bot</span> create a high-priority bug ticket for this.</div>
+                                            </div>
+                                        </div>
+                                         <div class="message">
+                                            <div class="avatar-bot">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <defs><linearGradient id="avatarGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                                                    <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </div>
+                                            <div class="message-content">
+                                                 <div class="message-header">
+                                                    <span class="username">Clarity Bot</span>
+                                                    <span class="timestamp">02:17 PM</span>
+                                                </div>
+                                                <div class="message-text"><span class="mention">@Kevin (QA)</span> here is the drafted ticket.</div>
+                                                <div class="bot-response">
+                                                    <strong>PRJ-132: Cart total fails to update after item removal.</strong><br>
+                                                    <small>Bug • Due: Tomorrow • Assignee: David (Dev)</small>
+                                                    <div class="actions">
+                                                        <span class="action-button">Create Ticket</span>
+                                                        <span class="action-button edit">Edit</span>
+                                                        <span class="action-button discard">Discard</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Definition Section -->
+        <section class="py-20 px-4">
+            <div class="container mx-auto max-w-5xl text-center">
+                <div class="scroll-animation">
+                    <h2 class="text-3xl md:text-4xl font-bold mb-6">Your Project's Missing <span class="gradient-text">Brain.</span></h2>
+                    <p class="text-lg md:text-xl text-gray-400 max-w-4xl mx-auto leading-relaxed">
+                        Clarity Bot gives your project a brain inside Slack. It's an intelligent assistant that securely learns from your team's conversations, documents, and meetings to become your project's single source of truth. Instead of digging through threads, you can simply ask questions and automate routine work, from summarizing meetings to creating Jira tickets. Clarity Bot connects the dots, so your team can build fast, deliver fast.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Features Section -->
+        <section class="py-20 px-4">
+            <div class="container mx-auto max-w-6xl">
+                <div class="text-center mb-16 scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight">An AI that understands your <span class="gradient-text">entire project.</span></h2>
+                    <p class="text-lg text-gray-400 mt-4 max-w-2xl mx-auto">From conversation to context to completion.</p>
+                </div>
+
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Feature 1: Context Engine -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m12 20 4-4"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Contextual Awareness</h3>
+                        <p class="text-gray-400">Clarity Bot securely listens to conversations and analyzes documents (PDFs, DOCX, etc.) to build a comprehensive, searchable knowledge base for your project.</p>
+                    </div>
+
+                    <!-- Feature 2: Transcription & Summarization -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 100ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><path d="M12 22a6 6 0 0 0 6-6V8a6 6 0 0 0-12 0v8a6 6 0 0 0 6 6Z"/><path d="M12 12a2 2 0 1 0-2-2 2 2 0 0 0 2 2Z"/><path d="M18 12a6 6 0 0 0-6-6"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Meeting Intelligence</h3>
+                        <p class="text-gray-400">Upload any meeting recording. Clarity Bot transcribes it with high accuracy, generates a concise summary of key decisions, and identifies all action items.</p>
+                    </div>
+                    
+                    <!-- Feature 3: Jira Automation -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 200ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M12.5 2.5a1 1 0 0 0-2 0h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/><path d="m21.5 11.5-1.9-1.9a1 1 0 0 0-1.4 0l-1.9 1.9a1 1 0 0 0 0 1.4l1.9 1.9a1 1 0 0 0 1.4 0l1.9-1.9a1 1 0 0 0 0-1.4Z"/><path d="M11.5 21.5a1 1 0 0 0 2 0h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-1a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Z"/><path d="M2.5 12.5a1 1 0 0 0 0-2h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1Z"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Effortless Jira Tickets</h3>
+                        <p class="text-gray-400">Action items are automatically drafted as Jira tickets, intelligently pre-filled with context. Approve or edit them directly in Slack. No more context switching.</p>
+                    </div>
+
+                    <!-- Feature 4: Conversational Q&A -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 300ms;">
+                        <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Conversational Q&A</h3>
+                        <p class="text-gray-400">Ask anything about your project. "How is the subscription implemented?" or "What was the last decision on the newsletter?" Get instant, accurate answers based on facts.</p>
+                    </div>
+
+                    <!-- Feature 5: Security -->
+                    <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 400ms;">
+                         <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-teal-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Secure & Private</h3>
+                        <p class="text-gray-400">Built with enterprise-grade security. Data is isolated per workspace, and you control who has access. The bot only interacts in DMs or authorized private groups.</p>
+                    </div>
+
+                    <!-- Feature 6: Made for Leaders -->
+                     <div class="feature-card p-6 rounded-2xl scroll-animation" style="transition-delay: 500ms;">
+                         <div class="flex items-center justify-center h-12 w-12 rounded-lg bg-gray-800 mb-4 border border-gray-700">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Built for Leaders</h3>
+                        <p class="text-gray-400">Perfect for Project Managers, Product Owners, and Scrum Masters who need to maintain momentum and ensure everyone is aligned without endless meetings.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works Section -->
+        <section class="py-20 px-4 bg-gray-900/20">
+            <div class="container mx-auto max-w-5xl">
+                <div class="text-center mb-16 scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight">Three simple steps to Clarity Bot.</h2>
+                    <p class="text-lg text-gray-400 mt-4 max-w-2xl mx-auto">Transform your workflow in minutes.</p>
+                </div>
+                <div class="grid md:grid-cols-3 gap-12 text-center relative">
+                    <!-- Dashed line connector for desktop -->
+                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-px border-t-2 border-dashed border-gray-700" style="transform: translateY(-50px);"></div>
+                    
+                    <div class="relative scroll-animation">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-teal-400 mx-auto mb-6 shadow-lg shadow-teal-500/10">1</div>
+                        <h3 class="text-2xl font-bold mb-2">Listen & Learn</h3>
+                        <p class="text-gray-400">The bot joins your channels as a member and learns from conversations, documents, and meeting recordings to build a comprehensive understanding of your project.</p>
+                    </div>
+                    <div class="relative scroll-animation" style="transition-delay: 150ms;">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-purple-400 mx-auto mb-6 shadow-lg shadow-purple-500/10">2</div>
+                        <h3 class="text-2xl font-bold mb-2">Extract & Analyze</h3>
+                        <p class="text-gray-400">Clarity Bot identifies action items, extracts key decisions, and understands context from your team's natural conversations and shared files.</p>
+                    </div>
+                    <div class="relative scroll-animation" style="transition-delay: 300ms;">
+                        <div class="flex items-center justify-center text-2xl font-bold h-20 w-20 rounded-full bg-gray-800 border-2 border-teal-400 mx-auto mb-6 shadow-lg shadow-teal-500/10">3</div>
+                        <h3 class="text-2xl font-bold mb-2">Create & Organize</h3>
+                        <p class="text-gray-400">Automatically drafts Jira tickets, lets you review and edit, then creates them with a single click. All within Slack, effortlessly.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Demo Section -->
+        <section class="py-20 md:py-32 px-4">
+            <div class="container mx-auto max-w-7xl">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div class="scroll-animation text-center md:text-left">
+                        <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-6">Don't miss a thing.</h2>
+                        <p class="text-lg md:text-xl text-gray-400 mb-8">
+                            From a simple question in a DM to a complete, context-aware status update in seconds. Clarity Bot connects the dots between your conversations and your Jira board.
+                        </p>
+                        <ul class="text-left space-y-4 text-gray-300">
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Track feature requests and bug reports.</li>
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Organize sprint planning and manage technical debt.</li>
+                            <li class="flex items-start"><span class="text-teal-400 mr-3 mt-1">✓</span> Eliminate the need to manually create tickets from messages.</li>
+                        </ul>
+                    </div>
+                    <div class="scroll-animation" style="transition-delay: 200ms;">
+                        <div class="slack-mockup" style="height: auto;" role="img" aria-label="A mockup of a direct message conversation with the Clarity Bot Slack bot, where it provides a status update on a Jira ticket.">
+                            <div class="slack-header">
+                                <div class="slack-dot dot-red"></div>
+                                <div class="slack-dot dot-yellow"></div>
+                                <div class="slack-dot dot-green"></div>
+                                <div class="slack-title">Direct Message</div>
+                            </div>
+                            <div class="message">
+                                <div class="avatar" style="background: linear-gradient(45deg, #f97316, #fde047);">JD</div>
+                                <div class="message-content">
+                                    <div class="message-header">
+                                        <span class="username">You</span>
+                                        <span class="timestamp">3:45 PM</span>
+                                    </div>
+                                    <div class="message-text">What's the current status of the user dashboard redesign task?</div>
+                                </div>
+                            </div>
+                            <div class="message">
+                                <div class="avatar-bot">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <defs><linearGradient id="avatarGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#30C6B8"/><stop offset="100%" stop-color="#7A5AF8"/></linearGradient></defs>
+                                        <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8.5L12 15L22 8.5" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2V15" stroke="url(#avatarGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="message-content">
+                                    <div class="message-header">
+                                        <span class="username">Clarity Bot</span>
+                                        <span class="timestamp">3:45 PM</span>
+                                    </div>
+                                    <div class="bot-response">
+                                       The user dashboard redesign is currently in progress. Wireframe is approved, Alex is working on the responsive layout, expected to be delivered by Tuesday. <a href="#" class="jira-link"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block" style="color: #4c9aff;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>PRJ-105</a>.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- FAQ Section -->
+        <section class="py-20 md:py-32 px-4">
+            <div class="container mx-auto max-w-4xl">
+                <div class="text-center mb-16 scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight">Your Questions, <span class="gradient-text">Answered.</span></h2>
+                </div>
+                <div class="space-y-4 scroll-animation" style="transition-delay: 200ms;">
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">How does Clarity Bot solve information overload?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Clarity Bot acts as your project's single source of truth. It securely listens to conversations, reads documents, and transcribes meetings to build an intelligent knowledge base. Instead of searching, you can simply ask and get an instant, accurate answer with sources, saving hours of work.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">How does Clarity Bot fix the broken workflow between Slack and Jira?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Clarity Bot eliminates context-switching. It identifies tasks in Slack conversations and automatically drafts Jira tickets pre-filled with all relevant context. You can approve or edit them directly in Slack, boosting your team's task creation workflow by up to 80%.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">How does Clarity Bot help with team alignment?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Clarity Bot creates a central brain for your project, ensuring everyone is on the same page, regardless of their time zone. It provides consistent, accurate answers from the project's knowledge base, reducing the need for constant check-in meetings.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">What makes Clarity Bot's AI different from a standard chatbot?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Clarity Bot is a specialist AI assistant that learns the unique context of your project. It uses a powerful technique called Retrieval-Augmented Generation (RAG), which means it doesn't guess. It first retrieves the actual facts from your project's documents, conversations, and meeting transcripts, and then generates an answer based only on that verified information. This prevents the "hallucinations" or incorrect answers common with general AI and ensures all information is grounded in your project's reality.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">How does Clarity Bot handle meetings and video calls?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">You can upload any audio or video recording. Clarity Bot will transcribe it with high accuracy, generate a concise summary of key decisions and action items, and make the entire transcript searchable, so you can ask questions about it later.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">How does the automated Jira ticket creation work?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">It's a three-step process: 1) Clarity Bot's AI identifies a task in a conversation. 2) It drafts a Jira ticket with suggested fields and sends it to you privately in Slack. 3) You can approve, edit, or discard the ticket with a single click.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">What tools and file types does Clarity Bot support?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Clarity Bot's deepest integration at launch is with Jira, with active development for Confluence, Asana, Trello, and GitHub. It supports PDF, DOCX, TXT, XLSX, and CSV files, and can transcribe MP3 and MP4 audio/video files.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">What is the "Founding Member" offer?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">The Founding Member offer is a one-time opportunity for 200 early adopters to get lifetime premium access at a significant discount. For a single payment of $299, you receive a 12-month subscription that begins on launch day, a permanent 70% discount on all future renewals, and priority access to new features. You can secure your spot in the <a href="#founders-circle" class="text-teal-400 hover:underline">Founders' Circle section</a> or <a href="#waitlist" class="text-teal-400 hover:underline">join the waitlist</a>.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">When will Clarity Bot officially launch?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">We are on track for a public launch before 2025 ends. Founding Members will receive priority access before the general release.</p></div>
+                    </div>
+                    <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">Is my project and conversation data secure?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">Yes, security is our highest priority. Clarity Bot uses enterprise-grade security, encrypts all data, and isolates each workspace's knowledge base using Supabase's Row Level Security to ensure your data remains private and secure.</p></div>
+                    </div>
+                     <div class="faq-item pt-4">
+                        <div class="faq-question py-4"><span class="text-xl font-semibold">Who can interact with the bot?</span><span class="faq-toggle text-2xl text-gray-500">+</span></div>
+                        <div class="faq-answer pb-4"><p class="text-gray-400 leading-relaxed">You have full control. A workspace administrator must explicitly grant access to individual users. The bot will only respond to or create tickets for these authorized users, ensuring your project's sensitive information remains confidential.</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Founders Circle CTA Section -->
+        <section id="founders-circle" class="py-20 md:py-32 px-4">
+             <div class="container mx-auto max-w-4xl text-center">
+                <div class="scroll-animation">
+                    <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">Become a <span class="gradient-text">Founding Member.</span></h2>
+                    <p class="text-lg text-gray-400 mb-10 max-w-3xl mx-auto">Shape the future of AI in project management and get an exclusive, permanent discount. Limited spots available.</p>
+                    
+                    <div class="founder-card max-w-lg mx-auto p-8 rounded-2xl text-left">
+                        <div class="flex justify-between items-baseline">
+                             <h3 class="text-2xl font-bold">Founders' Circle</h3>
+                             <span class="bg-teal-400/10 text-teal-300 text-xs font-semibold px-3 py-1 rounded-full">Limited Spots</span>
+                        </div>
+                        <p class="text-gray-400 mt-2 mb-6">Our exclusive offer for the pioneers.</p>
+                        
+                        <div class="mb-8">
+                            <span class="text-5xl font-extrabold">$299</span>
+                            <span class="text-gray-400 text-lg">/ 1 year license</span>
+                            <span class="text-gray-500 line-through ml-2">$999</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mb-8">
+                            <ul class="space-y-4 text-gray-300">
+                                <li class="flex items-center"><span class="text-teal-400 mr-3">✓</span> 50% Lifetime Discount</li>
+                                <li class="flex items-center"><span class="text-teal-400 mr-3">✓</span> Priority Early Access</li>
+                                <li class="flex items-center"><span class="text-teal-400 mr-3">✓</span> Influence the Future</li>
+                                <li class="flex items-center"><span class="text-teal-400 mr-3">✓</span> Instant Premium Support</li>
+                            </ul>
+                            <div class="p-3 rounded-lg text-gray-300 space-y-2 flex flex-col justify-center border border-gray-700 bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm">
+                                <p>3 Channels</p>
+                                <p>10 Users</p>
+                                <p>300 mins/mo transcription</p>
+                            </div>
+                        </div>
+                        
+                        <a href="https://buy.polar.sh/polar_cl_KMJ0F3LRgrqWRbPRLgPBXHbl5kWM1zXyyzYLX3gjXRN" class="cta-button w-full text-center block text-white font-bold py-4 px-8 rounded-lg" data-polar-checkout data-polar-checkout-theme="dark">Claim Your Founder Spot</a>
+                    </div>
+
+                    <div id="waitlist" class="mt-36 text-gray-400 scroll-animation" style="transition-delay: 200ms;">
+                        <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">Reclaim your focus. Ship faster.</h2>
+                        <p class="text-lg text-gray-400 mb-10 max-w-2xl mx-auto">Join the waitlist for launch updates and be the first to know when you can introduce a brain to your projects.</p>
+
+                        <form class="max-w-md mx-auto" name="waitlist" data-netlify="true">
+                            <input type="hidden" name="form-name" value="waitlist" />
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <input type="email" name="email" required placeholder="Your email address" class="flex-grow w-full px-5 py-3 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                                <button type="submit" class="cta-button text-white font-bold py-3 px-8 rounded-lg">Join Waitlist</button>
+                            </div>
+                            <p id="email-error" class="text-red-400 text-sm mt-2 text-left"></p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <div class="text-center py-8">
+            <a href="https://x.com/clarity_b0t" target="_blank" rel="noopener noreferrer" class="inline-block text-gray-400 hover:text-white transition-colors duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.858-7.56L6.493 22.846H1l8.604-9.867L1 1.154h7.596l5.222 6.787L18.901 1.153zm-1.051 19.492h2.268L7.406 3.608H5.01L17.85 20.645z"/></svg>
+            </a>
+        </div>
+
+    </main>
+        <!-- Footer -->
+        <footer class="text-center py-8 border-t border-gray-800">
+        <p class="text-gray-500">&copy; <span id="year">2025</span> clarity-bot.com | All rights reserved.</p>
+        </footer>
+
+    <div id="toaster" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-700 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300">
+        Thank you for joining the waitlist!
+    </div>
+    <script src="script.js"></script>
+
+    <!-- Cookie Consent Banner -->
+    <div id="cookie-consent-banner" class="fixed bottom-0 left-0 right-0 z-50 bg-gray-800 text-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4 transform translate-y-full transition-transform duration-500 ease-out">
+        <p class="text-sm text-center sm:text-left">
+            We use cookies to improve your experience and for analytics purposes. By continuing to use our site, you agree to our <a href="privacy.html" class="text-teal-400 hover:underline">Privacy Policy</a>.
+        </p>
+        <div class="flex gap-3">
+            <button id="accept-cookies" class="cta-button text-white font-semibold py-2 px-4 rounded-lg text-sm whitespace-nowrap">Accept All</button>
+            <button id="reject-cookies" class="secondary-button text-white font-semibold py-2 px-4 rounded-lg text-sm whitespace-nowrap">Reject All</button>
+            <!-- <button id="manage-cookies" class="secondary-button text-white font-semibold py-2 px-4 rounded-lg text-sm whitespace-nowrap">Manage</button> -->
+        </div>
+    </div>
+
+    <!-- Purchase Modal -->
+    <div id="purchase-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out" style="display: none; opacity: 0;">
+        <div id="modal-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div id="modal-content" class="relative w-full max-w-md scale-95 transform rounded-2xl border border-gray-700 bg-[#161B22] p-8 shadow-2xl transition-transform duration-300 ease-in-out">
+            <h2 class="text-2xl font-bold mb-4">Founding Member Purchase</h2>
+            <p class="text-gray-400 mb-6">Please provide your details and agree to the terms to proceed.</p>
+            
+            <form id="pre-payment-form">
+                <div class="space-y-4 mb-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <input type="text" name="name" placeholder="Name" required class="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                        <input type="text" name="surname" placeholder="Surname" required class="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                    </div>
+                    <input type="email" name="email" placeholder="Email Address" required class="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <input type="tel" name="phone" placeholder="Phone (Optional)" class="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                        <input type="text" name="country" placeholder="Country (Optional)" class="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white">
+                    </div>
+                </div>
+            </form>
+
+            <div class="space-y-4 mb-8">
+                <label class="flex items-center text-gray-300 cursor-pointer">
+                    <input type="checkbox" id="terms-checkbox" class="h-4 w-4 rounded border-gray-600 bg-gray-800 text-teal-400 focus:ring-2 focus:ring-teal-500/50">
+                    <span class="ml-3">I agree to the <a href="terms.html" target="_blank" class="text-teal-400 hover:underline" onclick="event.stopPropagation()">Terms and Conditions</a>.</span>
+                </label>
+                <label class="flex items-center text-gray-300 cursor-pointer">
+                    <input type="checkbox" id="privacy-checkbox" class="h-4 w-4 rounded border-gray-600 bg-gray-800 text-teal-400 focus:ring-2 focus:ring-teal-500/50">
+                    <span class="ml-3">I have read and agree to the <a href="privacy.html" target="_blank" class="text-teal-400 hover:underline" onclick="event.stopPropagation()">Privacy Policy</a>.</span>
+                </label>
+            </div>
+
+            <div class="text-center text-gray-500 text-sm mb-6">
+                <p class="bg-[#06202a] p-3 rounded-lg border border-gray-800 text-teal-200 text-sm mb-6"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-1"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                You will be redirected to the secure Polar.sh checkout page.</p>
+            </div>
+
+            <div id="modal-action-area" class="flex flex-col-reverse sm:flex-row gap-4">
+                <button id="cancel-button" class="secondary-button w-full sm:w-1/2 text-white font-bold py-3 px-6 rounded-lg">Cancel</button>
+                <button id="proceed-button" class="cta-button w-full sm:w-1/2 text-center text-white font-bold py-3 px-6 rounded-lg opacity-50 cursor-not-allowed">Agree & Continue</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
