@@ -29,7 +29,7 @@ class LLMServiceManager:
         if gcp_project_id:
             try:
                 aiplatform.init(project=gcp_project_id, location=gcp_location)
-                self._gemini_client = GenerativeModel("gemini-pro")
+                self._gemini_client = GenerativeModel("gemini-2.5-flash")
                 logger.info(f"Google Gemini client initialized for project {gcp_project_id} in {gcp_location}.")
             except Exception as e:
                 logger.error(f"Error initializing Google Gemini client: {e}")
@@ -93,7 +93,7 @@ class LLMServiceManager:
         :return: Generated summary or None if an error occurs.
         """
         full_prompt = f"{summarization_prompt}\n\nText to summarize:\n{text}"
-        return await self.generate_text(model_name="gemini-pro", prompt=full_prompt, **kwargs)
+        return await self.generate_text(model_name="gemini-2.5-flash", prompt=full_prompt, **kwargs)
 
 # Initialize the LLMServiceManager globally
 llm_service_manager = LLMServiceManager()
