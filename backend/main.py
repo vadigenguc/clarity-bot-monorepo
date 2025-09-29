@@ -17,6 +17,7 @@ import json # For serializing job payloads
 # Google Cloud Pub/Sub for job queuing
 from google.cloud import pubsub_v1
 from google.oauth2 import service_account
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +31,10 @@ supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_service_role_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 # Use AsyncClient for async operations in middleware and event handlers
 supabase: Client = create_client(supabase_url, supabase_service_role_key)
+
+# In-memory cache for file_shared events to handle duplicates
+file_event_cache = {}
+CACHE_EXPIRATION_SECONDS = 60  # Cache events for 60 seconds
 
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 PUBSUB_TRANSCRIPTION_TOPIC_NAME = "clarity-transcription-jobs" # Name of the Pub/Sub topic for transcription
@@ -170,6 +175,16 @@ async def handle_file_shared(event, say):
     """
     Handles file_shared events, publishing them for background processing if the bot is mentioned.
     """
+    file_id = event.get('file_id')
+    event_ts = float(event.get('event_ts', 0))
+
+    # Idempotency check using in-memory cache
+    current_time = time.time()
+    if file_id in file_event_cache and (current_time - file_event_cache[file_id]) < CACHE_EXPIRATION_SECONDS:
+        logger.warning(f"Duplicate file_shared event received for file {file_id}. Ignoring.")
+        return
+    file_event_cache[file_id] = current_time
+
     channel_id = event.get('channel_id')
     user_id = event.get('user_id')
 
@@ -191,8 +206,18 @@ async def handle_file_shared(event, say):
                               and any(f['id'] == event.get('file_id') for f in msg['files'])), None)
 
     if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
-        # Respond in a thread
-        await say(text="Thanks! I've received your file and will start processing it now.", thread_ts=message_with_file.get("ts"))
+        # Differentiate response based on file type
+        file_info = message_with_file.get("files")[0]
+        file_type = file_info.get("filetype", "")
+        file_name = file_info.get("name", "your file")
+
+        initial_response_text = ""
+        if file_type in ['mp4', 'mp3', 'wav', 'm4a', 'mkv', 'webm', 'avi', 'mov']:
+            initial_response_text = f"I have {file_name} and will start processing it now."
+        else:
+            initial_response_text = f"I have {file_name} and start reading now."
+
+        await say(text=initial_response_text, thread_ts=message_with_file.get("ts"))
         
         publisher, topic_path = get_pubsub_message_publisher_client()
         if not publisher or not topic_path:
