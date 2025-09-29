@@ -188,7 +188,7 @@ async def handle_file_shared(event, say):
     channel_id = event.get('channel_id')
     user_id = event.get('user_id')
 
-    # Requirement: Reject files in DMs
+    # Requirement: Reject files in DMs and redirect to channel
     if channel_id.startswith('D'):
         await say(
             channel=user_id,
