@@ -12,3 +12,4 @@ fastapi
 uvicorn
 google-cloud-aiplatform[generative_models]
 pdfplumber
+sentence-transformers
