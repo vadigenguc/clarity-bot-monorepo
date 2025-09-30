@@ -26,6 +26,21 @@ from backend.utils.prompt_loader import load_prompt
 
 # Google Cloud Pub/Sub for publishing new jobs from the worker
 from google.cloud import pubsub_v1
+from google.oauth2 import service_account
+
+
+def get_gcp_credentials():
+    """Constructs GCP credentials from environment variables."""
+    gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
+    if gcp_credentials_json:
+        try:
+            credentials_info = json.loads(gcp_credentials_json)
+            return service_account.Credentials.from_service_account_info(credentials_info)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}")
+            return None
+    logger.info("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
+    return None # Fallback to default credential discovery
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,8 +70,14 @@ def get_pubsub_transcription_publisher_client():
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub transcription publisher will not function.")
             return None, None
-        _pubsub_transcription_publisher = pubsub_v1.PublisherClient()
-        _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
+        try:
+            credentials = get_gcp_credentials()
+            _pubsub_transcription_publisher = pubsub_v1.PublisherClient(credentials=credentials)
+            _pubsub_transcription_topic_path = _pubsub_transcription_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TRANSCRIPTION_TOPIC_NAME)
+            logger.info("Pub/Sub transcription publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub transcription publisher: {e}")
+            return None, None
     return _pubsub_transcription_publisher, _pubsub_transcription_topic_path
 
 def get_pubsub_embedding_publisher_client():
@@ -65,8 +86,14 @@ def get_pubsub_embedding_publisher_client():
         if not GCP_PROJECT_ID:
             logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub embedding publisher will not function.")
             return None, None
-        _pubsub_embedding_publisher = pubsub_v1.PublisherClient()
-        _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
+        try:
+            credentials = get_gcp_credentials()
+            _pubsub_embedding_publisher = pubsub_v1.PublisherClient(credentials=credentials)
+            _pubsub_embedding_topic_path = _pubsub_embedding_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_EMBEDDING_TOPIC_NAME)
+            logger.info("Pub/Sub embedding publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub embedding publisher: {e}")
+            return None, None
     return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
 
 # Define max file size for direct transcription
