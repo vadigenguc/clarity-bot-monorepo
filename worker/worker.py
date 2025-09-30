@@ -292,23 +292,25 @@ async def process_and_store_content(workspace_id: str, channel_id: str, source_t
     if not content_text:
         logger.info(f"No content text to process for {source_type} {source_id}.")
         return
-
-    chunks = chunk_text(content_text)
-    for i, chunk in enumerate(chunks):
-        embedding_job_payload = {
-            "workspace_id": workspace_id, "channel_id": channel_id,
-            "source_type": source_type, "source_id": f"{source_id}_chunk_{i}",
-            "content": chunk
-        }
-        publisher, topic_path = get_pubsub_embedding_publisher_client()
-        if publisher and topic_path:
-            try:
+    try:
+        chunks = chunk_text(content_text)
+        logger.info(f"Processing {len(chunks)} chunks for {source_type} {source_id}.")
+        for i, chunk in enumerate(chunks):
+            embedding_job_payload = {
+                "workspace_id": workspace_id, "channel_id": channel_id,
+                "source_type": source_type, "source_id": f"{source_id}_chunk_{i}",
+                "content": chunk
+            }
+            publisher, topic_path = get_pubsub_embedding_publisher_client()
+            if publisher and topic_path:
+                logger.info(f"Publishing embedding job for chunk {i} of {source_id}.")
                 publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
-            except Exception as e:
-                logger.error(f"Error publishing embedding job for chunk {i} of {source_id}: {e}")
-        else:
-            # If no pub/sub, process directly (for local dev or simplicity)
-            await process_embedding_job(embedding_job_payload)
+            else:
+                logger.warning("Pub/Sub embedding publisher not available. Processing embedding job directly.")
+                await process_embedding_job(embedding_job_payload)
+    except Exception as e:
+        logger.error(f"CRITICAL FAILURE in process_and_store_content for {source_id}: {e}")
+        logger.error(traceback.format_exc())
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     try:
@@ -393,8 +395,6 @@ async def process_message_job(job_payload: dict):
     except Exception as e:
         logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
         await send_slack_message(channel_id, f"An error occurred while processing your message: {e}", slack_bot_token, thread_ts=message_ts)
-
-import traceback
 
 async def process_file_shared_job(job_payload: dict):
     """Processes a file shared event."""
@@ -486,27 +486,27 @@ async def process_file_shared_job(job_payload: dict):
 
 async def process_embedding_job(job_payload: dict):
     """Processes an embedding job, generates embedding, and stores it in Supabase."""
-    workspace_id = job_payload.get("workspace_id")
-    channel_id = job_payload.get("channel_id")
-    source_type = job_payload.get("source_type")
-    source_id = job_payload.get("source_id")
-    content = job_payload.get("content")
-
-    if not all([workspace_id, channel_id, source_type, source_id, content]):
-        logger.error(f"Missing data in embedding job payload: {job_payload}")
-        return
-
     try:
-        # Generate embedding using the LLM service manager
+        workspace_id = job_payload.get("workspace_id")
+        channel_id = job_payload.get("channel_id")
+        source_type = job_payload.get("source_type")
+        source_id = job_payload.get("source_id")
+        content = job_payload.get("content")
+
+        if not all([workspace_id, channel_id, source_type, source_id, content]):
+            logger.error(f"Missing data in embedding job payload: {job_payload}")
+            return
+
+        logger.info(f"Starting embedding generation for {source_type} {source_id}.")
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('all-MiniLM-L6-v2')
         embedding = model.encode(content).tolist()
+        logger.info(f"Embedding generated for {source_type} {source_id}.")
 
-        # Create an RLS client for the specific workspace and channel
         options = ClientOptions(headers={"x-workspace-id": workspace_id, "x-channel-id": channel_id})
         rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
 
-        # Store the content and embedding in the database
+        logger.info(f"Inserting embedding into database for {source_type} {source_id}.")
         await asyncio.to_thread(
             rls_supabase_client.from_('document_embeddings').insert({
                 'workspace_id': workspace_id,
@@ -519,7 +519,8 @@ async def process_embedding_job(job_payload: dict):
         )
         logger.info(f"Successfully processed and stored embedding for {source_type} {source_id}")
     except Exception as e:
-        logger.error(f"Error processing embedding job for {source_type} {source_id}: {e}")
+        logger.error(f"CRITICAL FAILURE in process_embedding_job for {job_payload.get('source_id')}: {e}")
+        logger.error(traceback.format_exc())
 
 async def process_activate_license_job(job_payload: dict):
     """Processes a license activation submission."""
