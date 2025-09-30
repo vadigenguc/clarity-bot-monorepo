@@ -7,5 +7,5 @@ python-docx
 pdfplumber
 pydub
 google-cloud-pubsub
-google-oauth2-service-account
+google-auth
 sentence-transformers
