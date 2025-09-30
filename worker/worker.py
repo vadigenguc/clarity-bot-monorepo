@@ -394,6 +394,8 @@ async def process_message_job(job_payload: dict):
         logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
         await send_slack_message(channel_id, f"An error occurred while processing your message: {e}", slack_bot_token, thread_ts=message_ts)
 
+import traceback
+
 async def process_file_shared_job(job_payload: dict):
     """Processes a file shared event."""
     slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
@@ -407,7 +409,7 @@ async def process_file_shared_job(job_payload: dict):
     message_ts = job_payload.get("message_ts") # For threaded replies
     
     try:
-        # Idempotency Check: See if this file has already been processed
+        # Idempotency Check
         existing_file_response = await asyncio.to_thread(
             rls_supabase.from_('slack_files').select('id').eq('slack_file_id', file_id).execute
         )
@@ -439,8 +441,8 @@ async def process_file_shared_job(job_payload: dict):
                 }).eq('slack_file_id', file_id).execute
             )
 
-            transcribed_text = None
             if file_type in ['mp3', 'mp4', 'wav', 'm4a', 'mkv', 'webm', 'avi', 'mov']:
+                # This block remains the same as it has its own error handling
                 response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
                 audio_content = await response.aread()
                 if file_size > MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES:
@@ -450,9 +452,8 @@ async def process_file_shared_job(job_payload: dict):
                 
                 if transcribed_text:
                     await process_and_store_content(team_id, channel_id, 'transcription', file_id, transcribed_text, rls_supabase)
-                    await send_slack_message(channel_id, f"I've processed {file_name}. Preparing the summary and analyzing actionable tasks now...", slack_bot_token, message_ts)
+                    await send_slack_message(channel_id, f"I've processed {file_name}. Preparing the summary...", slack_bot_token, message_ts)
                     
-                    # Summarization
                     summarization_prompt = load_prompt("summarization_prompt")
                     summary = await llm_service_manager.summarize_text(transcribed_text, summarization_prompt)
                     if summary:
@@ -461,18 +462,27 @@ async def process_file_shared_job(job_payload: dict):
                 else:
                     await send_slack_message(channel_id, f"❌ Failed to transcribe `{file_name}`.", slack_bot_token, message_ts)
             else:
-                response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
-                file_content = await response.aread()
-                # Run the synchronous, potentially long-running text extraction in a separate thread
-                extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
-                if extracted_text:
-                    await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
-                    await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
-                else:
-                    await send_slack_message(channel_id, f"⚠️ Could not extract text from `{file_name}`.", slack_bot_token, message_ts)
+                # Document Processing with explicit error logging
+                try:
+                    response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
+                    file_content = await response.aread()
+                    
+                    extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
+                    
+                    if extracted_text:
+                        await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
+                        await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
+                    else:
+                        await send_slack_message(channel_id, f"⚠️ Could not extract text from `{file_name}`.", slack_bot_token, message_ts)
+                except Exception as e:
+                    logger.error(f"CRITICAL FAILURE during document processing for {file_id}: {e}")
+                    logger.error(traceback.format_exc())
+                    await send_slack_message(channel_id, f"A critical error occurred while processing `{file_name}`. Please check the logs.", slack_bot_token, message_ts)
+
     except Exception as e:
-        logger.error(f"Error processing file_shared job for {file_id}: {e}")
-        await send_slack_message(channel_id, f"An error occurred while processing your file: {e}", slack_bot_token, message_ts)
+        logger.error(f"Outer error processing file_shared job for {file_id}: {e}")
+        logger.error(traceback.format_exc())
+        await send_slack_message(channel_id, f"An unexpected outer error occurred while processing your file: {e}", slack_bot_token, message_ts)
 
 async def process_embedding_job(job_payload: dict):
     """Processes an embedding job, generates embedding, and stores it in Supabase."""
