@@ -276,8 +276,7 @@ async def process_and_store_content(workspace_id: str, channel_id: str, source_t
         publisher, topic_path = get_pubsub_embedding_publisher_client()
         if publisher and topic_path:
             try:
-                future = publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
-                future.result()
+                publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
             except Exception as e:
                 logger.error(f"Error publishing embedding job for chunk {i} of {source_id}: {e}")
         else:
