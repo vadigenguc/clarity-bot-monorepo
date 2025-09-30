@@ -488,9 +488,6 @@ async def process_embedding_job(job_payload: dict):
 
     try:
         # Generate embedding using the LLM service manager
-        # Note: This assumes a sentence-transformer model is configured in llm_service_manager
-        # or we can use a generic text embedding model from a provider.
-        # For now, let's assume a placeholder function get_embedding exists.
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('all-MiniLM-L6-v2')
         embedding = model.encode(content).tolist()
