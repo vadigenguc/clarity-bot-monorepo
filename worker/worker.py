@@ -435,7 +435,9 @@ async def process_file_shared_job(job_payload: dict):
                     await send_slack_message(channel_id, f"❌ Failed to transcribe `{file_name}`.", slack_bot_token, message_ts)
             else:
                 response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
-                extracted_text = extract_text_from_file(await response.aread(), file_type)
+                file_content = await response.aread()
+                # Run the synchronous, potentially long-running text extraction in a separate thread
+                extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
                 if extracted_text:
                     await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
                     await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
