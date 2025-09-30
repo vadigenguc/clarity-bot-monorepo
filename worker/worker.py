@@ -340,21 +340,33 @@ async def process_message_job(job_payload: dict):
     message_ts, message_text, raw_message = job_payload["message_ts"], job_payload.get("text"), job_payload["raw_message"]
 
     try:
+        # If the message is a DM, do not store it. Only provide a conversational response.
+        if channel_id.startswith('D'):
+            if message_text and message_text.lower().strip() in ["hello", "hi", "hey"]:
+                reply_text = ("Hello! I'm the Slack Project Manager bot. How can I help you today?")
+                await send_slack_message(channel_id, reply_text, slack_bot_token)
+            else:
+                # For any other DM, provide a generic response without storing it.
+                # This can be enhanced later with conversational AI (Phase 7).
+                await send_slack_message(channel_id, "Message received. Note that I only learn from project channels, not DMs.", slack_bot_token)
+            return
+
+        # For channel messages, store and process for knowledge base.
         await asyncio.to_thread(
             rls_supabase.from_('slack_messages').insert({
                 'slack_message_ts': message_ts, 'channel_id': channel_id, 'user_id': user_id,
                 'workspace_id': team_id, 'message_text': message_text, 'raw_message_data': raw_message
             }).execute
         )
-        await process_and_store_content(team_id, channel_id, 'message', message_ts, message_text)
+        # Correctly pass the rls_supabase client to the processing function
+        await process_and_store_content(team_id, channel_id, 'message', message_ts, message_text, rls_supabase)
 
-        if message_text and message_text.lower().strip() in ["hello", "hi", "hey"]:
-            reply_text = ("Hello! I'm the Slack Project Manager bot. How can I help you today?")
-            await send_slack_message(channel_id, reply_text, slack_bot_token)
-        else:
-            await send_slack_message(channel_id, f"Message received and processed: '{message_text}'", slack_bot_token)
+        # Acknowledge the channel message
+        await send_slack_message(channel_id, f"Message received and added to the knowledge base.", slack_bot_token, thread_ts=message_ts)
+
     except Exception as e:
         logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
+        await send_slack_message(channel_id, f"An error occurred while processing your message: {e}", slack_bot_token, thread_ts=message_ts)
 
 async def process_file_shared_job(job_payload: dict):
     """Processes a file shared event."""
