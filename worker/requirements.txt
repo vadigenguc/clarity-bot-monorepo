@@ -1,11 +1,16 @@
 fastapi
+uvicorn
 python-dotenv
 supabase
 httpx
 pandas
 python-docx
 pdfplumber
+pdfminer.six
+openpyxl
 pydub
 google-cloud-pubsub
 google-auth
 sentence-transformers
+openai
+google-cloud-aiplatform[generative_models]
