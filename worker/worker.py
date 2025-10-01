@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import base64
 import uuid
 from datetime import datetime, timezone
+import traceback
 
 from fastapi import FastAPI, Request, Response, HTTPException
 
@@ -58,11 +59,14 @@ supabase: Client = create_client(supabase_url, supabase_service_role_key)
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 PUBSUB_TRANSCRIPTION_TOPIC_NAME = "clarity-transcription-jobs"
 PUBSUB_EMBEDDING_TOPIC_NAME = "clarity-embedding-jobs"
+PUBSUB_MESSAGE_TOPIC_NAME = "clarity-message-jobs"
 
 _pubsub_transcription_publisher = None
 _pubsub_embedding_publisher = None
+_pubsub_message_publisher = None
 _pubsub_transcription_topic_path = None
 _pubsub_embedding_topic_path = None
+_pubsub_message_topic_path = None
 
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
@@ -96,6 +100,22 @@ def get_pubsub_embedding_publisher_client():
             return None, None
     return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
 
+def get_pubsub_message_publisher_client():
+    global _pubsub_message_publisher, _pubsub_message_topic_path
+    if _pubsub_message_publisher is None:
+        if not GCP_PROJECT_ID:
+            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub message publisher will not function.")
+            return None, None
+        try:
+            credentials = get_gcp_credentials()
+            _pubsub_message_publisher = pubsub_v1.PublisherClient(credentials=credentials)
+            _pubsub_message_topic_path = _pubsub_message_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_MESSAGE_TOPIC_NAME)
+            logger.info("Pub/Sub message publisher client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub message publisher: {e}")
+            return None, None
+    return _pubsub_message_publisher, _pubsub_message_topic_path
+
 # Define max file size for direct transcription
 MAX_DIRECT_TRANSCRIPTION_SIZE_MB = 20
 MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES = MAX_DIRECT_TRANSCRIPTION_SIZE_MB * 1024 * 1024
@@ -111,11 +131,12 @@ async def receive_message(request: Request):
         raise HTTPException(status_code=400, detail="Invalid Pub/Sub message format")
 
     pubsub_message = envelope["message"]
+    message_id = pubsub_message.get("messageId", "no-message-id")
     message_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
     job_payload = json.loads(message_data)
     job_type = job_payload.get("type")
     
-    logger.info(f"Worker: Received job of type '{job_type}'")
+    logger.info(f"Worker: [Trace ID: {message_id}] Received job of type '{job_type}'.")
 
     # Route job to the appropriate processor
     job_processors = {
@@ -123,15 +144,17 @@ async def receive_message(request: Request):
         "admin_command": process_admin_command_job,
         "app_home_opened": process_app_home_opened_job,
         "file_shared": process_file_shared_job,
+        "file_shared_event": process_file_shared_event_job,
         "activate_license": process_activate_license_job,
         "embedding": process_embedding_job
     }
     
     processor = job_processors.get(job_type)
     if processor:
-        await processor(job_payload)
+        # Pass the message_id for traceable logging
+        await processor(job_payload, message_id)
     else:
-        logger.warning(f"Worker: Unknown job type received: {job_type}")
+        logger.warning(f"Worker: [Trace ID: {message_id}] Unknown job type received: {job_type}")
 
     return Response(status_code=204)
 
@@ -211,15 +234,16 @@ async def are_all_group_members_authorized(rls_supabase_client: Client, team_id:
         logger.error(f"Error checking group members' authorization in channel {channel_id}: {e}")
         return False
 
-async def check_authorization(job_payload: dict, slack_bot_token: str) -> tuple[bool, Client | None, str | None]:
+async def check_authorization(job_payload: dict, slack_bot_token: str, trace_id: str) -> tuple[bool, Client | None, str | None]:
     """Main authorization function for the worker."""
     channel_id = job_payload.get("channel_id")
     user_id = job_payload.get("user_id")
     team_id = job_payload.get("team_id")
     message_ts = job_payload.get("message_ts") # For threaded replies
 
+    logger.info(f"Worker: [Trace ID: {trace_id}] Starting authorization check for user {user_id} in channel {channel_id}.")
     if not all([channel_id, user_id, team_id]):
-        logger.warning(f"Missing context in job payload: {job_payload}")
+        logger.warning(f"Worker: [Trace ID: {trace_id}] Missing context in job payload: {job_payload}")
         # Send generic error to thread if possible
         if channel_id and message_ts:
             await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
@@ -229,28 +253,34 @@ async def check_authorization(job_payload: dict, slack_bot_token: str) -> tuple[
         options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": channel_id})
         rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
 
-        if not await is_channel_enabled(rls_supabase_client, team_id, channel_id):
+        channel_enabled = await is_channel_enabled(rls_supabase_client, team_id, channel_id)
+        logger.info(f"Worker: [Trace ID: {trace_id}] Channel enabled check for {channel_id}: {channel_enabled}")
+        if not channel_enabled:
             await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
             return False, None, "This channel is not enabled for bot interaction."
 
         user_is_authorized = await is_user_authorized(rls_supabase_client, team_id, user_id)
+        logger.info(f"Worker: [Trace ID: {trace_id}] User authorized check for {user_id}: {user_is_authorized}")
         
         if channel_id.startswith('D') and not user_is_authorized:
-            # No thread for DMs, so no generic message
+            logger.warning(f"Worker: [Trace ID: {trace_id}] Unauthorized user {user_id} in DM.")
             return False, None, "You are not authorized to interact with this bot."
 
-        if not await are_all_group_members_authorized(rls_supabase_client, team_id, channel_id, slack_bot_token):
+        all_members_authorized = await are_all_group_members_authorized(rls_supabase_client, team_id, channel_id, slack_bot_token)
+        logger.info(f"Worker: [Trace ID: {trace_id}] All group members authorized check for {channel_id}: {all_members_authorized}")
+        if not all_members_authorized:
             await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
             return False, None, "This group chat contains unauthorized members."
         
-        # For public/private channels, the user must be authorized
         if (channel_id.startswith('C') or channel_id.startswith('G')) and not user_is_authorized:
+            logger.warning(f"Worker: [Trace ID: {trace_id}] Unauthorized user {user_id} in channel {channel_id}.")
             await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
             return False, None, "You are not authorized to interact with this bot in this channel."
 
+        logger.info(f"Worker: [Trace ID: {trace_id}] Authorization successful for user {user_id} in channel {channel_id}.")
         return True, rls_supabase_client, None
     except Exception as e:
-        logger.error(f"An internal error occurred during authorization: {e}")
+        logger.error(f"Worker: [Trace ID: {trace_id}] An internal error occurred during authorization: {e}", exc_info=True)
         await send_slack_message(channel_id, f"Hey <@{user_id}>, your request needs attention, please check your DM.", slack_bot_token, message_ts)
         return False, None, f"An internal error occurred during authorization: {e}"
 
@@ -288,12 +318,13 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
         chunks.append(" ".join(words[i:i + chunk_size]))
     return chunks
 
-async def process_and_store_content(workspace_id: str, channel_id: str, source_type: str, source_id: str, content_text: str, rls_supabase_client: Client):
+async def process_and_store_content(workspace_id: str, channel_id: str, source_type: str, source_id: str, content_text: str, rls_supabase_client: Client, trace_id: str):
     if not content_text:
-        logger.info(f"No content text to process for {source_type} {source_id}.")
+        logger.info(f"Worker: [Trace ID: {trace_id}] No content text to process for {source_type} {source_id}.")
         return
 
     chunks = chunk_text(content_text)
+    logger.info(f"Worker: [Trace ID: {trace_id}] Chunked content for {source_id} into {len(chunks)} chunks.")
     for i, chunk in enumerate(chunks):
         embedding_job_payload = {
             "type": "embedding",
@@ -304,12 +335,13 @@ async def process_and_store_content(workspace_id: str, channel_id: str, source_t
         publisher, topic_path = get_pubsub_embedding_publisher_client()
         if publisher and topic_path:
             try:
+                logger.info(f"Worker: [Trace ID: {trace_id}] Publishing embedding job for chunk {i} of {source_id}.")
                 publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
             except Exception as e:
-                logger.error(f"Error publishing embedding job for chunk {i} of {source_id}: {e}")
+                logger.error(f"Worker: [Trace ID: {trace_id}] Error publishing embedding job for chunk {i} of {source_id}: {e}", exc_info=True)
         else:
             # If no pub/sub, process directly (for local dev or simplicity)
-            await process_embedding_job(embedding_job_payload)
+            await process_embedding_job(embedding_job_payload, trace_id)
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     try:
@@ -354,10 +386,67 @@ async def transcribe_large_audio_file(audio_content: bytes, file_name: str, slac
         return None
 
 # --- Job Processing Functions ---
-async def process_message_job(job_payload: dict):
+async def process_file_shared_event_job(job_payload: dict, trace_id: str):
+    """
+    Handles the raw file_shared event, checks for the 'ingest' keyword,
+    and then triggers the actual file processing.
+    """
+    event = job_payload.get("raw_event", {})
+    file_id = event.get('file_id')
+    channel_id = event.get('channel_id')
+    user_id = event.get('user_id')
+    slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
+
+    # Check if the file was shared in a DM
+    if channel_id and channel_id.startswith('D'):
+        await send_slack_message(user_id, "Sharing files is not allowed in DM. Please share your file in the related project channel.", slack_bot_token)
+        return # Stop processing
+
+    # This is the logic moved from the frontend
+    try:
+        async with httpx.AsyncClient() as client:
+            bot_user_id_res = await client.get("https://slack.com/api/auth.test", headers={"Authorization": f"Bearer {slack_bot_token}"})
+            bot_user_id = bot_user_id_res.json().get("user_id")
+
+            history_response = await client.get("https://slack.com/api/conversations.history", headers={"Authorization": f"Bearer {slack_bot_token}"}, params={"channel": channel_id, "limit": 5})
+            messages = history_response.json().get('messages', [])
+            
+            message_with_file = next((msg for msg in messages
+                                      if msg.get('user') == user_id and 'files' in msg
+                                      and any(f['id'] == file_id for f in msg['files'])), None)
+
+        if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
+            # If conditions are met, publish the original 'file_shared' job for processing
+            publisher, topic_path = get_pubsub_message_publisher_client()
+            if not publisher or not topic_path:
+                logger.error("Pub/Sub message publisher not configured for file sharing.")
+                return
+            
+            team_id = event.get("team_id") or (message_with_file.get("files")[0].get("user_team") if message_with_file.get("files") else None)
+            processed_payload = {
+                "type": "file_shared", # The original job type
+                "team_id": team_id,
+                "channel_id": channel_id,
+                "user_id": user_id,
+                "file_id": file_id,
+                "raw_event": event,
+                "message_ts": message_with_file.get("ts")
+            }
+            publisher.publish(topic_path, json.dumps(processed_payload).encode("utf-8"))
+            
+            # Send the initial "I have your file" response
+            file_name = message_with_file.get("files")[0].get("name", "your file")
+            await send_slack_message(channel_id, f"I have {file_name} and will start processing it now.", slack_bot_token, thread_ts=message_with_file.get("ts"))
+        else:
+            logger.info(f"Ignoring file {file_id} as bot was not explicitly instructed to ingest.")
+
+    except Exception as e:
+        logger.error(f"Worker: [Trace ID: {trace_id}] Error in process_file_shared_event_job for {file_id}: {e}", exc_info=True)
+
+async def process_message_job(job_payload: dict, trace_id: str):
     """Processes a single message job from the queue."""
     slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
-    is_authorized, rls_supabase, error_message = await check_authorization(job_payload, slack_bot_token)
+    is_authorized, rls_supabase, error_message = await check_authorization(job_payload, slack_bot_token, trace_id)
     
     if not is_authorized:
         await send_slack_message(job_payload['user_id'], error_message, slack_bot_token)
@@ -386,19 +475,19 @@ async def process_message_job(job_payload: dict):
             }).execute
         )
         # Correctly pass the rls_supabase client to the processing function
-        await process_and_store_content(team_id, channel_id, 'message', message_ts, message_text, rls_supabase)
+        await process_and_store_content(team_id, channel_id, 'message', message_ts, message_text, rls_supabase, trace_id)
 
         # Acknowledge the channel message
         await send_slack_message(channel_id, f"Message received and added to the knowledge base.", slack_bot_token, thread_ts=message_ts)
 
     except Exception as e:
-        logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
+        logger.error(f"Worker: [Trace ID: {trace_id}] Error processing message job for {message_ts}: {e}", exc_info=True)
         await send_slack_message(channel_id, f"An error occurred while processing your message: {e}", slack_bot_token, thread_ts=message_ts)
 
-async def process_file_shared_job(job_payload: dict):
+async def process_file_shared_job(job_payload: dict, trace_id: str):
     """Processes a file shared event."""
     slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
-    is_authorized, rls_supabase, error_message = await check_authorization(job_payload, slack_bot_token)
+    is_authorized, rls_supabase, error_message = await check_authorization(job_payload, slack_bot_token, trace_id)
     
     if not is_authorized:
         await send_slack_message(job_payload['user_id'], error_message, slack_bot_token)
@@ -408,12 +497,13 @@ async def process_file_shared_job(job_payload: dict):
     message_ts = job_payload.get("message_ts") # For threaded replies
     
     try:
+        logger.info(f"Worker: [Trace ID: {trace_id}] Starting file processing for file_id: {file_id}.")
         # Idempotency Check: See if this file has already been processed
         existing_file_response = await asyncio.to_thread(
             rls_supabase.from_('slack_files').select('id').eq('slack_file_id', file_id).execute
         )
         if existing_file_response.data:
-            logger.warning(f"Duplicate file_shared job received for file {file_id}. Ignoring.")
+            logger.warning(f"Worker: [Trace ID: {trace_id}] Duplicate file_shared job received for file {file_id}. Ignoring.")
             return
 
         # Store initial metadata
@@ -433,6 +523,7 @@ async def process_file_shared_job(job_payload: dict):
                 return
 
             file_url, file_type, file_name, file_size = file_data.get('url_private'), file_data.get('filetype'), file_data.get('name'), file_data.get('size', 0)
+            logger.info(f"Worker: [Trace ID: {trace_id}] Downloading file '{file_name}' ({file_size} bytes) from URL.")
             
             await asyncio.to_thread(
                 rls_supabase.from_('slack_files').update({
@@ -444,38 +535,48 @@ async def process_file_shared_job(job_payload: dict):
             if file_type in ['mp3', 'mp4', 'wav', 'm4a', 'mkv', 'webm', 'avi', 'mov']:
                 response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
                 audio_content = await response.aread()
+                logger.info(f"Worker: [Trace ID: {trace_id}] File download complete. Starting transcription.")
                 if file_size > MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES:
+                    logger.info(f"Worker: [Trace ID: {trace_id}] Using large file transcription for '{file_name}'.")
                     transcribed_text = await transcribe_large_audio_file(audio_content, file_name, slack_bot_token, channel_id, message_ts)
                 else:
+                    logger.info(f"Worker: [Trace ID: {trace_id}] Using direct transcription for '{file_name}'.")
                     transcribed_text = await transcribe_audio(audio_content, file_name)
                 
                 if transcribed_text:
-                    await process_and_store_content(team_id, channel_id, 'transcription', file_id, transcribed_text, rls_supabase)
+                    logger.info(f"Worker: [Trace ID: {trace_id}] Transcription successful. Storing content.")
+                    await process_and_store_content(team_id, channel_id, 'transcription', file_id, transcribed_text, rls_supabase, trace_id)
                     await send_slack_message(channel_id, f"I've processed {file_name}. Preparing the summary and analyzing actionable tasks now...", slack_bot_token, message_ts)
                     
                     # Summarization
+                    logger.info(f"Worker: [Trace ID: {trace_id}] Starting summarization for '{file_name}'.")
                     summarization_prompt = load_prompt("summarization_prompt")
                     summary = await llm_service_manager.summarize_text(transcribed_text, summarization_prompt)
                     if summary:
-                        await process_and_store_content(team_id, channel_id, 'summary', file_id, summary, rls_supabase)
+                        logger.info(f"Worker: [Trace ID: {trace_id}] Summarization successful. Storing summary.")
+                        await process_and_store_content(team_id, channel_id, 'summary', file_id, summary, rls_supabase, trace_id)
                         await send_slack_message(channel_id, f"📝 *Summary for `{file_name}`:*\n{summary}", slack_bot_token, message_ts)
+                    else:
+                        logger.warning(f"Worker: [Trace ID: {trace_id}] Summarization failed for '{file_name}'.")
                 else:
                     await send_slack_message(channel_id, f"❌ Failed to transcribe `{file_name}`.", slack_bot_token, message_ts)
             else:
                 response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
                 file_content = await response.aread()
                 # Run the synchronous, potentially long-running text extraction in a separate thread
+                logger.info(f"Worker: [Trace ID: {trace_id}] Starting text extraction for document '{file_name}'.")
                 extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
                 if extracted_text:
-                    await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
+                    logger.info(f"Worker: [Trace ID: {trace_id}] Text extraction successful. Storing content.")
+                    await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase, trace_id)
                     await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
                 else:
                     await send_slack_message(channel_id, f"⚠️ Could not extract text from `{file_name}`.", slack_bot_token, message_ts)
     except Exception as e:
-        logger.error(f"Error processing file_shared job for {file_id}: {e}")
+        logger.error(f"Worker: [Trace ID: {trace_id}] Error processing file_shared job for {file_id}: {e}", exc_info=True)
         await send_slack_message(channel_id, f"An error occurred while processing your file: {e}", slack_bot_token, message_ts)
 
-async def process_embedding_job(job_payload: dict):
+async def process_embedding_job(job_payload: dict, trace_id: str = "untraced"):
     """Processes an embedding job, generates embedding, and stores it in Supabase."""
     workspace_id = job_payload.get("workspace_id")
     channel_id = job_payload.get("channel_id")
@@ -484,10 +585,11 @@ async def process_embedding_job(job_payload: dict):
     content = job_payload.get("content")
 
     if not all([workspace_id, channel_id, source_type, source_id, content]):
-        logger.error(f"Missing data in embedding job payload: {job_payload}")
+        logger.error(f"Worker: [Trace ID: {trace_id}] Missing data in embedding job payload: {job_payload}")
         return
 
     try:
+        logger.info(f"Worker: [Trace ID: {trace_id}] Generating embedding for {source_type} {source_id}.")
         # Generate embedding using the LLM service manager
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('/app/models/all-MiniLM-L6-v2')
@@ -508,11 +610,11 @@ async def process_embedding_job(job_payload: dict):
                 'embedding': embedding
             }).execute
         )
-        logger.info(f"Successfully processed and stored embedding for {source_type} {source_id}")
+        logger.info(f"Worker: [Trace ID: {trace_id}] Successfully processed and stored embedding for {source_type} {source_id}")
     except Exception as e:
-        logger.error(f"Error processing embedding job for {source_type} {source_id}: {e}")
+        logger.error(f"Worker: [Trace ID: {trace_id}] Error processing embedding job for {source_type} {source_id}: {e}", exc_info=True)
 
-async def process_activate_license_job(job_payload: dict):
+async def process_activate_license_job(job_payload: dict, trace_id: str):
     """Processes a license activation submission."""
     team_id, user_id = job_payload["team_id"], job_payload["user_id"]
     license_key = job_payload["license_key"]
@@ -573,7 +675,7 @@ async def find_user_id_by_name(username: str, slack_bot_token: str) -> str | Non
         logger.error(f"Error looking up user by name '{username}': {e}")
     return None
 
-async def process_admin_command_job(job_payload: dict):
+async def process_admin_command_job(job_payload: dict, trace_id: str):
     command_name, requesting_user_id, team_id, response_url, text = job_payload.get("command_name"), job_payload.get("user_id"), job_payload.get("team_id"), job_payload.get("response_url"), job_payload.get("text", "").strip()
     slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
 
@@ -608,7 +710,7 @@ async def process_admin_command_job(job_payload: dict):
             response = await asyncio.to_thread(supabase_admin.from_('authorized_users').delete().eq('workspace_id', team_id).eq('user_id', parsed_user_id).execute)
             await send_response(response_url, f"Access revoked for <@{parsed_user_id}>." if response.data else f"<@{parsed_user_id}> was not authorized.")
 
-async def process_app_home_opened_job(job_payload: dict):
+async def process_app_home_opened_job(job_payload: dict, trace_id: str):
     user_id, team_id, slack_bot_token = job_payload.get("user_id"), job_payload.get("team_id"), os.environ.get("SLACK_BOT_TOKEN")
     try:
         options = ClientOptions(headers={"x-workspace-id": team_id, "x-channel-id": "none"})
