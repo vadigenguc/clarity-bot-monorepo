@@ -123,6 +123,7 @@ async def receive_message(request: Request):
         "admin_command": process_admin_command_job,
         "app_home_opened": process_app_home_opened_job,
         "file_shared": process_file_shared_job,
+        "file_shared_event": process_file_shared_event_job,
         "activate_license": process_activate_license_job,
         "embedding": process_embedding_job
     }
@@ -394,6 +395,59 @@ async def process_message_job(job_payload: dict):
     except Exception as e:
         logger.error(f"Worker: Error processing message job for {message_ts}: {e}")
         await send_slack_message(channel_id, f"An error occurred while processing your message: {e}", slack_bot_token, thread_ts=message_ts)
+
+async def process_file_shared_event_job(job_payload: dict):
+    """
+    Handles the raw file_shared event, checks for the 'ingest' keyword,
+    and then triggers the actual file processing.
+    """
+    event = job_payload.get("raw_event", {})
+    file_id = event.get('file_id')
+    channel_id = event.get('channel_id')
+    user_id = event.get('user_id')
+    slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
+
+    # This is the logic moved from the frontend
+    try:
+        async with httpx.AsyncClient() as client:
+            bot_user_id_res = await client.get("https://slack.com/api/auth.test", headers={"Authorization": f"Bearer {slack_bot_token}"})
+            bot_user_id = bot_user_id_res.json().get("user_id")
+
+            history_response = await client.get("https://slack.com/api/conversations.history", headers={"Authorization": f"Bearer {slack_bot_token}"}, params={"channel": channel_id, "limit": 5})
+            messages = history_response.json().get('messages', [])
+            
+            message_with_file = next((msg for msg in messages
+                                      if msg.get('user') == user_id and 'files' in msg
+                                      and any(f['id'] == file_id for f in msg['files'])), None)
+
+        if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
+            # If conditions are met, publish the original 'file_shared' job for processing
+            publisher, topic_path = get_pubsub_message_publisher_client()
+            if not publisher or not topic_path:
+                logger.error("Pub/Sub message publisher not configured for file sharing.")
+                return
+            
+            team_id = event.get("team_id") or (message_with_file.get("files")[0].get("user_team") if message_with_file.get("files") else None)
+            processed_payload = {
+                "type": "file_shared", # The original job type
+                "team_id": team_id,
+                "channel_id": channel_id,
+                "user_id": user_id,
+                "file_id": file_id,
+                "raw_event": event,
+                "message_ts": message_with_file.get("ts")
+            }
+            publisher.publish(topic_path, json.dumps(processed_payload).encode("utf-8"))
+            
+            # Send the initial "I have your file" response
+            file_name = message_with_file.get("files")[0].get("name", "your file")
+            await send_slack_message(channel_id, f"I have {file_name} and will start processing it now.", slack_bot_token, thread_ts=message_with_file.get("ts"))
+        else:
+            logger.info(f"Ignoring file {file_id} as bot was not explicitly instructed to ingest.")
+
+    except Exception as e:
+        logger.error(f"Error in process_file_shared_event_job for {file_id}: {e}")
+        logger.error(traceback.format_exc())
 
 async def process_file_shared_job(job_payload: dict):
     """Processes a file shared event."""
