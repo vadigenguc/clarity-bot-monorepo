@@ -165,7 +165,8 @@ async def handle_message(message):
             "user_id": message.get("user"), "message_ts": message.get("ts"), "text": message.get("text"),
             "raw_message": message
         }
-        publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
     except Exception as e:
         logger.error(f"Error publishing message event to Pub/Sub: {e}")
 
@@ -230,7 +231,8 @@ async def handle_file_shared(event, say):
                 "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
                 "message_ts": message_with_file.get("ts")
             }
-            publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+            future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+            future.result()
         except Exception as e:
             logger.error(f"Error publishing file_shared event to Pub/Sub: {e}")
     else:
@@ -255,7 +257,8 @@ async def publish_admin_command(command):
             "trigger_id": command["trigger_id"],
             "text": command.get("text", "")
         }
-        publisher.publish(topic_path, json.dumps(command_payload).encode("utf-8"))
+        future = publisher.publish(topic_path, json.dumps(command_payload).encode("utf-8"))
+        future.result()
         logger.info(f"Published admin command {command['command']} to Pub/Sub topic: {topic_path}")
     except Exception as e:
         logger.error(f"Error publishing admin command to Pub/Sub: {e}")
@@ -323,7 +326,8 @@ async def handle_license_activation_submission(ack, body, logger):
             "type": "activate_license", "user_id": body["user"]["id"], "team_id": body["user"]["team_id"],
             "license_key": license_key
         }
-        publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
     except Exception as e:
         logger.error(f"Error publishing license activation to Pub/Sub: {e}")
 
@@ -340,6 +344,7 @@ async def handle_app_home_opened(event, logger):
             "type": "app_home_opened", "user_id": event.get("user"), "team_id": event.get("team"),
             "raw_event": event
         }
-        publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result()
     except Exception as e:
         logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}")
