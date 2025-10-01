@@ -292,25 +292,24 @@ async def process_and_store_content(workspace_id: str, channel_id: str, source_t
     if not content_text:
         logger.info(f"No content text to process for {source_type} {source_id}.")
         return
-    try:
-        chunks = chunk_text(content_text)
-        logger.info(f"Processing {len(chunks)} chunks for {source_type} {source_id}.")
-        for i, chunk in enumerate(chunks):
-            embedding_job_payload = {
-                "workspace_id": workspace_id, "channel_id": channel_id,
-                "source_type": source_type, "source_id": f"{source_id}_chunk_{i}",
-                "content": chunk
-            }
-            publisher, topic_path = get_pubsub_embedding_publisher_client()
-            if publisher and topic_path:
-                logger.info(f"Publishing embedding job for chunk {i} of {source_id}.")
+
+    chunks = chunk_text(content_text)
+    for i, chunk in enumerate(chunks):
+        embedding_job_payload = {
+            "type": "embedding",
+            "workspace_id": workspace_id, "channel_id": channel_id,
+            "source_type": source_type, "source_id": f"{source_id}_chunk_{i}",
+            "content": chunk
+        }
+        publisher, topic_path = get_pubsub_embedding_publisher_client()
+        if publisher and topic_path:
+            try:
                 publisher.publish(topic_path, json.dumps(embedding_job_payload).encode("utf-8"))
-            else:
-                logger.warning("Pub/Sub embedding publisher not available. Processing embedding job directly.")
-                await process_embedding_job(embedding_job_payload)
-    except Exception as e:
-        logger.error(f"CRITICAL FAILURE in process_and_store_content for {source_id}: {e}")
-        logger.error(traceback.format_exc())
+            except Exception as e:
+                logger.error(f"Error publishing embedding job for chunk {i} of {source_id}: {e}")
+        else:
+            # If no pub/sub, process directly (for local dev or simplicity)
+            await process_embedding_job(embedding_job_payload)
 
 async def transcribe_audio(audio_content: bytes, file_name: str) -> str | None:
     try:
@@ -409,7 +408,7 @@ async def process_file_shared_job(job_payload: dict):
     message_ts = job_payload.get("message_ts") # For threaded replies
     
     try:
-        # Idempotency Check
+        # Idempotency Check: See if this file has already been processed
         existing_file_response = await asyncio.to_thread(
             rls_supabase.from_('slack_files').select('id').eq('slack_file_id', file_id).execute
         )
@@ -441,8 +440,8 @@ async def process_file_shared_job(job_payload: dict):
                 }).eq('slack_file_id', file_id).execute
             )
 
+            transcribed_text = None
             if file_type in ['mp3', 'mp4', 'wav', 'm4a', 'mkv', 'webm', 'avi', 'mov']:
-                # This block remains the same as it has its own error handling
                 response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
                 audio_content = await response.aread()
                 if file_size > MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES:
@@ -452,8 +451,9 @@ async def process_file_shared_job(job_payload: dict):
                 
                 if transcribed_text:
                     await process_and_store_content(team_id, channel_id, 'transcription', file_id, transcribed_text, rls_supabase)
-                    await send_slack_message(channel_id, f"I've processed {file_name}. Preparing the summary...", slack_bot_token, message_ts)
+                    await send_slack_message(channel_id, f"I've processed {file_name}. Preparing the summary and analyzing actionable tasks now...", slack_bot_token, message_ts)
                     
+                    # Summarization
                     summarization_prompt = load_prompt("summarization_prompt")
                     summary = await llm_service_manager.summarize_text(transcribed_text, summarization_prompt)
                     if summary:
@@ -462,51 +462,42 @@ async def process_file_shared_job(job_payload: dict):
                 else:
                     await send_slack_message(channel_id, f"❌ Failed to transcribe `{file_name}`.", slack_bot_token, message_ts)
             else:
-                # Document Processing with explicit error logging
-                try:
-                    response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
-                    file_content = await response.aread()
-                    
-                    extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
-                    
-                    if extracted_text:
-                        await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
-                        await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
-                    else:
-                        await send_slack_message(channel_id, f"⚠️ Could not extract text from `{file_name}`.", slack_bot_token, message_ts)
-                except Exception as e:
-                    logger.error(f"CRITICAL FAILURE during document processing for {file_id}: {e}")
-                    logger.error(traceback.format_exc())
-                    await send_slack_message(channel_id, f"A critical error occurred while processing `{file_name}`. Please check the logs.", slack_bot_token, message_ts)
-
+                response = await client.get(file_url, headers={"Authorization": f"Bearer {slack_bot_token}"})
+                file_content = await response.aread()
+                # Run the synchronous, potentially long-running text extraction in a separate thread
+                extracted_text = await asyncio.to_thread(extract_text_from_file, file_content, file_type)
+                if extracted_text:
+                    await process_and_store_content(team_id, channel_id, 'file', file_id, extracted_text, rls_supabase)
+                    await send_slack_message(channel_id, f"✅ I've processed `{file_name}` and added it to the knowledge base.", slack_bot_token, message_ts)
+                else:
+                    await send_slack_message(channel_id, f"⚠️ Could not extract text from `{file_name}`.", slack_bot_token, message_ts)
     except Exception as e:
-        logger.error(f"Outer error processing file_shared job for {file_id}: {e}")
-        logger.error(traceback.format_exc())
-        await send_slack_message(channel_id, f"An unexpected outer error occurred while processing your file: {e}", slack_bot_token, message_ts)
+        logger.error(f"Error processing file_shared job for {file_id}: {e}")
+        await send_slack_message(channel_id, f"An error occurred while processing your file: {e}", slack_bot_token, message_ts)
 
 async def process_embedding_job(job_payload: dict):
     """Processes an embedding job, generates embedding, and stores it in Supabase."""
+    workspace_id = job_payload.get("workspace_id")
+    channel_id = job_payload.get("channel_id")
+    source_type = job_payload.get("source_type")
+    source_id = job_payload.get("source_id")
+    content = job_payload.get("content")
+
+    if not all([workspace_id, channel_id, source_type, source_id, content]):
+        logger.error(f"Missing data in embedding job payload: {job_payload}")
+        return
+
     try:
-        workspace_id = job_payload.get("workspace_id")
-        channel_id = job_payload.get("channel_id")
-        source_type = job_payload.get("source_type")
-        source_id = job_payload.get("source_id")
-        content = job_payload.get("content")
-
-        if not all([workspace_id, channel_id, source_type, source_id, content]):
-            logger.error(f"Missing data in embedding job payload: {job_payload}")
-            return
-
-        logger.info(f"Starting embedding generation for {source_type} {source_id}.")
+        # Generate embedding using the LLM service manager
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('all-MiniLM-L6-v2')
         embedding = model.encode(content).tolist()
-        logger.info(f"Embedding generated for {source_type} {source_id}.")
 
+        # Create an RLS client for the specific workspace and channel
         options = ClientOptions(headers={"x-workspace-id": workspace_id, "x-channel-id": channel_id})
         rls_supabase_client = create_client(supabase_url, supabase_service_role_key, options=options)
 
-        logger.info(f"Inserting embedding into database for {source_type} {source_id}.")
+        # Store the content and embedding in the database
         await asyncio.to_thread(
             rls_supabase_client.from_('document_embeddings').insert({
                 'workspace_id': workspace_id,
@@ -519,8 +510,7 @@ async def process_embedding_job(job_payload: dict):
         )
         logger.info(f"Successfully processed and stored embedding for {source_type} {source_id}")
     except Exception as e:
-        logger.error(f"CRITICAL FAILURE in process_embedding_job for {job_payload.get('source_id')}: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Error processing embedding job for {source_type} {source_id}: {e}")
 
 async def process_activate_license_job(job_payload: dict):
     """Processes a license activation submission."""
