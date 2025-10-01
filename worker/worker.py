@@ -490,7 +490,7 @@ async def process_embedding_job(job_payload: dict):
     try:
         # Generate embedding using the LLM service manager
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('all-MiniLM-L6-v2')
+        model = SentenceTransformer('/app/models/all-MiniLM-L6-v2')
         embedding = model.encode(content).tolist()
 
         # Create an RLS client for the specific workspace and channel
