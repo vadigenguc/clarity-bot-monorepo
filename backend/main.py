@@ -170,71 +170,25 @@ async def handle_message(message):
         logger.error(f"Error publishing message event to Pub/Sub: {e}")
 
 @slack_app.event("file_shared")
-async def handle_file_shared(event, say):
+async def handle_file_shared(event):
     """
-    Handles file_shared events, publishing them for background processing if the bot is mentioned.
+    Handles file_shared events by immediately publishing them to Pub/Sub
+    for background processing.
     """
-    file_id = event.get('file_id')
-    event_ts = float(event.get('event_ts', 0))
-
-    # Idempotency check using in-memory cache
-    current_time = time.time()
-    if file_id in file_event_cache and (current_time - file_event_cache[file_id]) < CACHE_EXPIRATION_SECONDS:
-        logger.warning(f"Duplicate file_shared event received for file {file_id}. Ignoring.")
-        return
-    file_event_cache[file_id] = current_time
-
-    channel_id = event.get('channel_id')
-    user_id = event.get('user_id')
-
-    # Requirement: Reject files in DMs and redirect to channel
-    if channel_id.startswith('D'):
-        await say(
-            channel=user_id,
-            text="You can not send files via DM. Please share your file in the relevant channel for me to process. Do not forget to mention me."
-        )
+    publisher, topic_path = get_pubsub_message_publisher_client()
+    if not publisher or not topic_path:
+        logger.error("Pub/Sub message publisher not configured for file sharing.")
         return
 
-    # Acknowledge the event immediately to prevent timeouts, but only if explicitly asked to ingest.
-    bot_user_id_res = await slack_app.client.auth_test()
-    bot_user_id = bot_user_id_res.get("user_id")
-    
-    history_response = await slack_app.client.conversations_history(channel=channel_id, limit=5)
-    message_with_file = next((msg for msg in history_response.get('messages', []) 
-                              if msg.get('user') == user_id and 'files' in msg 
-                              and any(f['id'] == event.get('file_id') for f in msg['files'])), None)
-
-    if message_with_file and f"<@{bot_user_id}>" in message_with_file.get('text', '') and "ingest" in message_with_file.get('text', '').lower():
-        # Differentiate response based on file type
-        file_info = message_with_file.get("files")[0]
-        file_type = file_info.get("filetype", "")
-        file_name = file_info.get("name", "your file")
-
-        initial_response_text = ""
-        if file_type in ['mp4', 'mp3', 'wav', 'm4a', 'mkv', 'webm', 'avi', 'mov']:
-            initial_response_text = f"I have {file_name} and will start processing it now."
-        else:
-            initial_response_text = f"I have {file_name} and start reading now."
-
-        await say(text=initial_response_text, thread_ts=message_with_file.get("ts"))
-        
-        publisher, topic_path = get_pubsub_message_publisher_client()
-        if not publisher or not topic_path:
-            logger.error("Pub/Sub message publisher not configured for file sharing.")
-            return
-
-        try:
-            team_id = event.get("team_id") or (message_with_file.get("files")[0].get("user_team") if message_with_file.get("files") else None)
-            payload = {
-                "type": "file_shared", "team_id": team_id, "channel_id": event.get("channel_id"),
-                "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
-                "message_ts": message_with_file.get("ts")
-            }
-            publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
-        except Exception as e:
-            logger.error(f"Error publishing file_shared event to Pub/Sub: {e}")
-    else:
-        logger.info(f"Ignoring file {event.get('file_id')} as bot was not explicitly instructed to ingest.")
+    try:
+        # The payload is now just the raw event, with a type hint.
+        payload = {
+            "type": "file_shared_event", # A new, distinct type for this raw event
+            "raw_event": event
+        }
+        publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+    except Exception as e:
+        logger.error(f"Error publishing raw file_shared event to Pub/Sub: {e}")
 
 # --- Slack Command Listeners ---
 async def publish_admin_command(command):
