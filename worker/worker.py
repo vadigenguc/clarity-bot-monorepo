@@ -58,14 +58,11 @@ supabase: Client = create_client(supabase_url, supabase_service_role_key)
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 PUBSUB_TRANSCRIPTION_TOPIC_NAME = "clarity-transcription-jobs"
 PUBSUB_EMBEDDING_TOPIC_NAME = "clarity-embedding-jobs"
-PUBSUB_MESSAGE_TOPIC_NAME = "clarity-message-jobs"
 
 _pubsub_transcription_publisher = None
 _pubsub_embedding_publisher = None
-_pubsub_message_publisher = None
 _pubsub_transcription_topic_path = None
 _pubsub_embedding_topic_path = None
-_pubsub_message_topic_path = None
 
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
@@ -98,22 +95,6 @@ def get_pubsub_embedding_publisher_client():
             logger.error(f"Failed to initialize Pub/Sub embedding publisher: {e}")
             return None, None
     return _pubsub_embedding_publisher, _pubsub_embedding_topic_path
-
-def get_pubsub_message_publisher_client():
-    global _pubsub_message_publisher, _pubsub_message_topic_path
-    if _pubsub_message_publisher is None:
-        if not GCP_PROJECT_ID:
-            logger.error("GCP_PROJECT_ID environment variable not set. Pub/Sub message publisher will not function.")
-            return None, None
-        try:
-            credentials = get_gcp_credentials()
-            _pubsub_message_publisher = pubsub_v1.PublisherClient(credentials=credentials)
-            _pubsub_message_topic_path = _pubsub_message_publisher.topic_path(GCP_PROJECT_ID, PUBSUB_MESSAGE_TOPIC_NAME)
-            logger.info("Pub/Sub message publisher client initialized.")
-        except Exception as e:
-            logger.error(f"Failed to initialize Pub/Sub message publisher: {e}")
-            return None, None
-    return _pubsub_message_publisher, _pubsub_message_topic_path
 
 # Define max file size for direct transcription
 MAX_DIRECT_TRANSCRIPTION_SIZE_MB = 20
