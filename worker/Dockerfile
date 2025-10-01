@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY worker/worker.py .
 COPY backend/ ./backend/
 
+# Copy the downloaded model files
+COPY worker/models/ /app/models/
+
 # Copy the startup script and make it executable
 COPY worker/start.sh .
 RUN chmod +x ./start.sh
