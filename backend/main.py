@@ -170,11 +170,13 @@ async def handle_message(message):
             "user_id": message.get("user"), "message_ts": message.get("ts"), "text": message.get("text"),
             "raw_message": message
         }
-        logger.info(f"Attempting to publish message to topic: {topic_path}")
-        await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-        logger.info("Successfully handed off publish job to background thread.")
+        logger.info(f"Attempting to publish message to topic: {topic_path} (Synchronous for diagnosis)")
+        # Temporarily forcing synchronous publish for diagnosis
+        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
+        future.result() # This will block and raise an exception if publish fails
+        logger.info("Successfully published message synchronously.")
     except Exception as e:
-        logger.error(f"CRITICAL: Error publishing message event to Pub/Sub: {e}", exc_info=True)
+        logger.error(f"CRITICAL: Synchronous publish to Pub/Sub failed: {e}", exc_info=True)
 
 @slack_app.event("file_shared")
 async def handle_file_shared(event, say):
