@@ -56,13 +56,15 @@ def get_gcp_credentials():
     """Constructs GCP credentials from environment variables."""
     gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
     if gcp_credentials_json:
+        logger.info("Found GCP_CREDENTIALS_JSON environment variable.")
         try:
             credentials_info = json.loads(gcp_credentials_json)
+            logger.info(f"Successfully parsed GCP credentials for service account: {credentials_info.get('client_email')}")
             return service_account.Credentials.from_service_account_info(credentials_info)
         except (json.JSONDecodeError, TypeError) as e:
-            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}")
+            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}", exc_info=True)
             return None
-    logger.info("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
+    logger.warning("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
     return None # Fallback to default credential discovery
 
 def get_pubsub_transcription_publisher_client():
@@ -152,11 +154,14 @@ async def endpoint(req: Request):
 @slack_app.message()
 async def handle_message(message):
     """Publishes all message events to Pub/Sub for background processing."""
+    logger.info(f"handle_message triggered for user {message.get('user')} in channel {message.get('channel')}")
     if message.get("subtype") == "file_share":
+        logger.info("Ignoring message with subtype 'file_share'")
         return # Ignore file_share subtypes to avoid duplicate processing
+        
     publisher, topic_path = get_pubsub_message_publisher_client()
     if not publisher or not topic_path:
-        logger.error("Pub/Sub message publisher not configured.")
+        logger.error("Pub/Sub message publisher not configured. Aborting publish.")
         return
 
     try:
@@ -165,9 +170,11 @@ async def handle_message(message):
             "user_id": message.get("user"), "message_ts": message.get("ts"), "text": message.get("text"),
             "raw_message": message
         }
+        logger.info(f"Attempting to publish message to topic: {topic_path}")
         await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        logger.info("Successfully handed off publish job to background thread.")
     except Exception as e:
-        logger.error(f"Error publishing message event to Pub/Sub: {e}", exc_info=True)
+        logger.error(f"CRITICAL: Error publishing message event to Pub/Sub: {e}", exc_info=True)
 
 @slack_app.event("file_shared")
 async def handle_file_shared(event, say):
