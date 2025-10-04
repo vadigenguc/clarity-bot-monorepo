@@ -28,20 +28,7 @@ from backend.utils.prompt_loader import load_prompt
 # Google Cloud Pub/Sub for publishing new jobs from the worker
 from google.cloud import pubsub_v1
 from google.oauth2 import service_account
-
-
-def get_gcp_credentials():
-    """Constructs GCP credentials from environment variables."""
-    gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
-    if gcp_credentials_json:
-        try:
-            credentials_info = json.loads(gcp_credentials_json)
-            return service_account.Credentials.from_service_account_info(credentials_info)
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}")
-            return None
-    logger.info("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
-    return None # Fallback to default credential discovery
+from backend.utils.gcp_utils import get_gcp_credentials # Import the shared utility
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -116,9 +103,8 @@ def get_pubsub_message_publisher_client():
             return None, None
     return _pubsub_message_publisher, _pubsub_message_topic_path
 
-# Define max file size for direct transcription
-MAX_DIRECT_TRANSCRIPTION_SIZE_MB = 20
-MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES = MAX_DIRECT_TRANSCRIPTION_SIZE_MB * 1024 * 1024
+# Define max file size for direct transcription (in bytes)
+MAX_DIRECT_TRANSCRIPTION_SIZE_BYTES = 20 * 1024 * 1024 # 20 MB
 
 app = FastAPI()
 
@@ -592,7 +578,8 @@ async def process_embedding_job(job_payload: dict, trace_id: str = "untraced"):
         logger.info(f"Worker: [Trace ID: {trace_id}] Generating embedding for {source_type} {source_id}.")
         # Generate embedding using the LLM service manager
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('/app/models/all-MiniLM-L6-v2')
+        model_path = os.environ.get("SENTENCE_TRANSFORMER_MODEL_PATH", "/app/models/all-MiniLM-L6-v2")
+        model = SentenceTransformer(model_path)
         embedding = model.encode(content).tolist()
 
         # Create an RLS client for the specific workspace and channel

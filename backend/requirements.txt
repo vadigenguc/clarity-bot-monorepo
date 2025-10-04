@@ -6,7 +6,6 @@ aiohttp
 certifi
 pydub
 slack_bolt
-slack_sdk
 supabase
 httpx
 asyncio

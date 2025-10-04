@@ -18,6 +18,7 @@ import json # For serializing job payloads
 from google.cloud import pubsub_v1
 from google.oauth2 import service_account
 import time
+from backend.utils.gcp_utils import get_gcp_credentials # Import the shared utility
 
 # Load environment variables from .env file
 load_dotenv()
@@ -53,21 +54,6 @@ _pubsub_transcription_topic_path = None
 _pubsub_embedding_topic_path = None
 _pubsub_message_topic_path = None
 _pubsub_admin_topic_path = None
-
-def get_gcp_credentials():
-    """Constructs GCP credentials from environment variables."""
-    gcp_credentials_json = os.environ.get("GCP_CREDENTIALS_JSON")
-    if gcp_credentials_json:
-        logger.info("Found GCP_CREDENTIALS_JSON environment variable.")
-        try:
-            credentials_info = json.loads(gcp_credentials_json)
-            logger.info(f"Successfully parsed GCP credentials for service account: {credentials_info.get('client_email')}")
-            return service_account.Credentials.from_service_account_info(credentials_info)
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(f"Failed to parse GCP_CREDENTIALS_JSON: {e}", exc_info=True)
-            return None
-    logger.warning("GCP_CREDENTIALS_JSON not found. Falling back to default credentials.")
-    return None # Fallback to default credential discovery
 
 def get_pubsub_transcription_publisher_client():
     global _pubsub_transcription_publisher, _pubsub_transcription_topic_path
@@ -181,8 +167,9 @@ async def handle_message(message):
             "raw_message": message
         }
         logger.info(f"Attempting to publish message to topic: {topic_path}")
-        await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-        logger.info("Successfully handed off publish job to background thread.")
+        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        await publish_future # Ensure the publish operation completes
+        logger.info("Successfully published message to Pub/Sub.")
     except Exception as e:
         logger.error(f"CRITICAL: Error publishing message event to Pub/Sub: {e}", exc_info=True)
 
@@ -247,7 +234,9 @@ async def handle_file_shared(event, say):
                 "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
                 "message_ts": message_with_file.get("ts")
             }
-            await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+            publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+            await publish_future
+            logger.info("Successfully published file_shared event to Pub/Sub.")
         except Exception as e:
             logger.error(f"Error publishing file_shared event to Pub/Sub: {e}", exc_info=True)
     else:
@@ -340,7 +329,9 @@ async def handle_license_activation_submission(ack, body, logger):
             "type": "activate_license", "user_id": body["user"]["id"], "team_id": body["user"]["team_id"],
             "license_key": license_key
         }
-        await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        await publish_future
+        logger.info("Successfully published license activation to Pub/Sub.")
     except Exception as e:
         logger.error(f"Error publishing license activation to Pub/Sub: {e}", exc_info=True)
 
@@ -357,6 +348,8 @@ async def handle_app_home_opened(event, logger):
             "type": "app_home_opened", "user_id": event.get("user"), "team_id": event.get("team"),
             "raw_event": event
         }
-        await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        await publish_future
+        logger.info("Successfully published app_home_opened event to Pub/Sub.")
     except Exception as e:
         logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}", exc_info=True)
