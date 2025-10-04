@@ -148,6 +148,31 @@ app = FastAPI()
 async def root():
     return {"status": "ok"}
 
+@app.get("/test-pubsub-publish")
+async def test_pubsub_publish():
+    """
+    Temporary diagnostic endpoint to test Pub/Sub publishing directly.
+    Forces synchronous publish and returns result or error.
+    """
+    publisher, topic_path = get_pubsub_message_publisher_client()
+    if not publisher or not topic_path:
+        return {"status": "error", "message": "Pub/Sub message publisher not configured."}
+
+    try:
+        test_payload = {
+            "type": "diagnostic_test",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "message": "This is a test message from the diagnostic endpoint."
+        }
+        logger.info(f"Attempting to publish diagnostic message to topic: {topic_path} (Synchronous)")
+        future = publisher.publish(topic_path, json.dumps(test_payload).encode("utf-8"))
+        message_id = future.result() # This will block and raise an exception if publish fails
+        logger.info(f"Successfully published diagnostic message synchronously. Message ID: {message_id}")
+        return {"status": "success", "message": f"Published diagnostic message with ID: {message_id}"}
+    except Exception as e:
+        logger.error(f"CRITICAL: Diagnostic Pub/Sub publish failed: {e}", exc_info=True)
+        return {"status": "error", "message": f"Diagnostic Pub/Sub publish failed: {e}"}
+
 @app.post("/slack/events")
 async def endpoint(req: Request):
     return await slack_handler.handle(req)
