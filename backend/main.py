@@ -18,7 +18,7 @@ import json # For serializing job payloads
 from google.cloud import pubsub_v1
 from google.oauth2 import service_account
 import time
-from backend.utils.gcp_utils import get_gcp_credentials # Import the shared utility
+from utils.gcp_utils import get_gcp_credentials # Import the shared utility
 
 # Load environment variables from .env file
 load_dotenv()
