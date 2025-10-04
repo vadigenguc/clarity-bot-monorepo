@@ -34,6 +34,8 @@ supabase: Client = create_client(supabase_url, supabase_service_role_key)
 
 # In-memory cache for file_shared events to handle duplicates
 file_event_cache = {}
+# In-memory cache for message events to handle duplicates (Slack retries)
+message_event_cache = {}
 CACHE_EXPIRATION_SECONDS = 60  # Cache events for 60 seconds
 
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
@@ -158,6 +160,14 @@ async def handle_message(message):
     if message.get("subtype") == "file_share":
         logger.info("Ignoring message with subtype 'file_share'")
         return # Ignore file_share subtypes to avoid duplicate processing
+
+    message_ts = message.get("ts")
+    # Idempotency check for message events
+    current_time = time.time()
+    if message_ts in message_event_cache and (current_time - message_event_cache[message_ts]) < CACHE_EXPIRATION_SECONDS:
+        logger.warning(f"Duplicate message event received for ts {message_ts}. Ignoring.")
+        return
+    message_event_cache[message_ts] = current_time
         
     publisher, topic_path = get_pubsub_message_publisher_client()
     if not publisher or not topic_path:
@@ -167,16 +177,14 @@ async def handle_message(message):
     try:
         payload = {
             "type": "message", "team_id": message.get("team"), "channel_id": message.get("channel"),
-            "user_id": message.get("user"), "message_ts": message.get("ts"), "text": message.get("text"),
+            "user_id": message.get("user"), "message_ts": message_ts, "text": message.get("text"),
             "raw_message": message
         }
-        logger.info(f"Attempting to publish message to topic: {topic_path} (Synchronous for diagnosis)")
-        # Temporarily forcing synchronous publish for diagnosis
-        future = publisher.publish(topic_path, json.dumps(payload).encode("utf-8"))
-        future.result() # This will block and raise an exception if publish fails
-        logger.info("Successfully published message synchronously.")
+        logger.info(f"Attempting to publish message to topic: {topic_path}")
+        await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        logger.info("Successfully handed off publish job to background thread.")
     except Exception as e:
-        logger.error(f"CRITICAL: Synchronous publish to Pub/Sub failed: {e}", exc_info=True)
+        logger.error(f"CRITICAL: Error publishing message event to Pub/Sub: {e}", exc_info=True)
 
 @slack_app.event("file_shared")
 async def handle_file_shared(event, say):
