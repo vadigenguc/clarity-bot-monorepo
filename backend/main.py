@@ -167,9 +167,8 @@ async def handle_message(message):
             "raw_message": message
         }
         logger.info(f"Attempting to publish message to topic: {topic_path}")
-        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-        await publish_future # Ensure the publish operation completes
-        logger.info("Successfully published message to Pub/Sub.")
+        message_id = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        logger.info(f"Successfully published message to Pub/Sub. Message ID: {message_id}")
     except Exception as e:
         logger.error(f"CRITICAL: Error publishing message event to Pub/Sub: {e}", exc_info=True)
 
@@ -234,9 +233,8 @@ async def handle_file_shared(event, say):
                 "user_id": event.get("user_id"), "file_id": event.get("file_id"), "raw_event": event,
                 "message_ts": message_with_file.get("ts")
             }
-            publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-            await publish_future
-            logger.info("Successfully published file_shared event to Pub/Sub.")
+            message_id = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+            logger.info(f"Successfully published file_shared event to Pub/Sub. Message ID: {message_id}")
         except Exception as e:
             logger.error(f"Error publishing file_shared event to Pub/Sub: {e}", exc_info=True)
     else:
@@ -329,9 +327,8 @@ async def handle_license_activation_submission(ack, body, logger):
             "type": "activate_license", "user_id": body["user"]["id"], "team_id": body["user"]["team_id"],
             "license_key": license_key
         }
-        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-        await publish_future
-        logger.info("Successfully published license activation to Pub/Sub.")
+        message_id = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        logger.info(f"Successfully published license activation to Pub/Sub. Message ID: {message_id}")
     except Exception as e:
         logger.error(f"Error publishing license activation to Pub/Sub: {e}", exc_info=True)
 
@@ -348,8 +345,7 @@ async def handle_app_home_opened(event, logger):
             "type": "app_home_opened", "user_id": event.get("user"), "team_id": event.get("team"),
             "raw_event": event
         }
-        publish_future = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
-        await publish_future
-        logger.info("Successfully published app_home_opened event to Pub/Sub.")
+        message_id = await asyncio.to_thread(publisher.publish, topic_path, json.dumps(payload).encode("utf-8"))
+        logger.info(f"Successfully published app_home_opened event to Pub/Sub. Message ID: {message_id}")
     except Exception as e:
         logger.error(f"Error publishing app_home_opened event to Pub/Sub: {e}", exc_info=True)
